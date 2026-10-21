@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { INSPECTOR_RESERVED } from '../../graph/viewport'
 import { useUiStore, type Notice } from '../../state/uiStore'
+import { useInspectorShown } from './useMinimapFits'
 import { Button, IconButton } from '../ui/Button'
 import { Icon } from '../ui/Icon'
 import { useWorkspace } from './WorkspaceContext'
@@ -45,6 +46,7 @@ function NoticeToast({ notice }: { notice: Notice }) {
 
 /** Floating notices plus a one-line summary of what is loaded and saving. */
 export function StatusBar() {
+  const inspectorShown = useInspectorShown()
   const notices = useUiStore((s) => s.notices)
   const { data, visible, connections, margin, library } = useWorkspace()
   const saving = data.links.some((l) => l.pending)
@@ -56,7 +58,7 @@ export function StatusBar() {
       {/* Centred in the canvas area left of the floating inspector. */}
       <div
         className="pointer-events-none absolute left-0 top-3 z-30 flex justify-center px-4"
-        style={{ right: INSPECTOR_RESERVED }}
+        style={{ right: inspectorShown ? INSPECTOR_RESERVED : 0 }}
       >
         <div className="flex w-[520px] max-w-full flex-col gap-2">
           {notices.map((n) => (

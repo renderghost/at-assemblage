@@ -9,6 +9,7 @@ import { Button, IconButton, Spinner } from '../ui/Button'
 import { BlueskyIcon } from '../ui/BlueskyIcon'
 import { Icon } from '../ui/Icon'
 import { Logo } from '../ui/Logo'
+import { NEW_CARD_SHORTCUT } from './NewCardDialog'
 import { NewCollectionDialog } from './NewCollectionDialog'
 import { SidebarToggle } from './SidebarToggle'
 import { UserMenu } from './UserMenu'
@@ -343,6 +344,25 @@ function ExternalLinks() {
   )
 }
 
+function NewCardButton() {
+  const openAddCard = useUiStore((s) => s.openAddCard)
+  return (
+    <div className="shrink-0 border-b border-line px-3 py-2.5">
+      <Button
+        variant="primary"
+        icon="plus"
+        className="w-full"
+        title={`New card (${NEW_CARD_SHORTCUT})`}
+        aria-keyshortcuts="Meta+K Control+K"
+        onClick={() => openAddCard()}
+      >
+        New card
+        <kbd className="ml-auto rounded bg-white/20 px-1.5 font-sans text-[11px] font-medium">{NEW_CARD_SHORTCUT}</kbd>
+      </Button>
+    </div>
+  )
+}
+
 export function Sidebar() {
   return (
     <nav
@@ -357,6 +377,7 @@ export function Sidebar() {
           <Logo />
         </div>
       </div>
+      <NewCardButton />
       <SidebarTabs />
       <ExternalLinks />
       <UserMenu />

@@ -4,18 +4,18 @@ import type { Position, Positions } from '../graph/layout'
 
 export type SidebarTab = 'collections' | 'filters'
 
-export type InspectorSection = 'details' | 'notes' | 'collections' | 'connections' | 'suggestions' | 'connection' | 'selection' | 'legend'
+export type InspectorSection = 'details' | 'notes' | 'collections' | 'connections' | 'suggestions' | 'connection' | 'selection'
 
-const SECTIONS_KEY = 'assemblage:inspector-sections:v1'
+// v2: Details and Notes now open by default.
+const SECTIONS_KEY = 'assemblage:inspector-sections:v2'
 const DEFAULT_SECTIONS: Record<InspectorSection, boolean> = {
   details: true,
-  notes: false,
+  notes: true,
   collections: false,
-  connections: true,
+  connections: false,
   suggestions: false,
   connection: true,
   selection: true,
-  legend: false,
 }
 
 function loadSections(): Record<InspectorSection, boolean> {
@@ -58,7 +58,13 @@ export type AddCardRequest = {
   imageUrl?: string
   collectionIds?: string[]
   connectTo?: { cardId: string; direction: 'outgoing' | 'incoming'; type?: string }
+  /** Canvas position for the new card (e.g. where the user right-clicked). */
+  position?: { x: number; y: number }
 }
+
+export type ContextMenuState =
+  | { kind: 'pane'; x: number; y: number; flow: { x: number; y: number } }
+  | { kind: 'card'; x: number; y: number; cardId: string }
 
 export type Notice = {
   id: number
@@ -91,12 +97,19 @@ type UiState = {
   inspectorSections: Record<InspectorSection, boolean>
   notices: Notice[]
   addCardRequest: AddCardRequest | null
+  /** Card ids whose edit / delete dialogs are open. */
+  editCardId: string | null
+  contextMenu: ContextMenuState | null
+  deleteCardId: string | null
 
   setSelectedGroupIds: (ids: string[]) => void
   toggleGroup: (id: string) => void
   loadLayout: (key: string, positions: Positions) => void
   mergePositions: (positions: Positions) => void
   movePosition: (id: string, pos: Position) => void
+  /** Positions chosen for cards that are being created; the canvas uses them instead of auto-layout. */
+  pendingPlacements: Positions
+  placeNewCard: (id: string, pos: Position) => void
   setSelected: (selected: SelectionIds) => void
   /** Selects in the canvas; `focus` (default true) also pans and zooms to it. */
   requestSelection: (selected: SelectionIds, opts?: { focus?: boolean }) => void
@@ -115,6 +128,9 @@ type UiState = {
   dismissNotice: (id: number) => void
   openAddCard: (request?: AddCardRequest) => void
   closeAddCard: () => void
+  setEditCardId: (id: string | null) => void
+  setContextMenu: (menu: ContextMenuState | null) => void
+  setDeleteCardId: (id: string | null) => void
   reset: () => void
 }
 
@@ -122,6 +138,7 @@ const initial = {
   selectedGroupIds: [] as string[],
   layoutKey: null as string | null,
   positions: {} as Positions,
+  pendingPlacements: {} as Positions,
   selected: { nodes: [], edges: [] } as SelectionIds,
   selectionRequest: null as UiState['selectionRequest'],
   filters: EMPTY_FILTERS,
@@ -134,6 +151,9 @@ const initial = {
   sidebarTab: 'collections' as SidebarTab,
   notices: [] as Notice[],
   addCardRequest: null as AddCardRequest | null,
+  editCardId: null as string | null,
+  contextMenu: null as ContextMenuState | null,
+  deleteCardId: null as string | null,
 }
 
 let noticeId = 0
@@ -150,6 +170,7 @@ export const useUiStore = create<UiState>()((set) => ({
   loadLayout: (layoutKey, positions) => set({ layoutKey, positions }),
   mergePositions: (positions) => set((s) => ({ positions: { ...s.positions, ...positions } })),
   movePosition: (id, pos) => set((s) => ({ positions: { ...s.positions, [id]: pos } })),
+  placeNewCard: (id, pos) => set((s) => ({ pendingPlacements: { ...s.pendingPlacements, [id]: pos } })),
   setSelected: (selected) => set({ selected }),
   requestSelection: (selected, opts) =>
     set((s) => ({
@@ -186,5 +207,8 @@ export const useUiStore = create<UiState>()((set) => ({
   dismissNotice: (id) => set((s) => ({ notices: s.notices.filter((n) => n.id !== id) })),
   openAddCard: (request = {}) => set({ addCardRequest: request }),
   closeAddCard: () => set({ addCardRequest: null }),
+  setEditCardId: (editCardId) => set({ editCardId }),
+  setContextMenu: (contextMenu) => set({ contextMenu }),
+  setDeleteCardId: (deleteCardId) => set({ deleteCardId }),
   reset: () => set({ ...initial, sidebarOpen: loadSidebarOpen(), inspectorSections: loadSections() }),
 }))

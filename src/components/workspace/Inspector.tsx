@@ -68,7 +68,7 @@ function DetailsSection({ item, canEdit, onEdit }: { item: GraphItem; canEdit: b
         {canEdit || item.url ? (
           <div className="flex flex-wrap gap-1 pt-1">
             {canEdit ? (
-              <Button size="sm" variant="primary" icon="pencil" onClick={onEdit} title="Edit your Semble note on this card">
+              <Button size="sm" variant="primary" icon="pencil" onClick={onEdit} title="Edit this card's collections, or delete it">
                 Edit
               </Button>
             ) : null}
@@ -388,55 +388,18 @@ function ConnectionsSection({ item }: { item: GraphItem }) {
 
 function CardInspector({ item }: { item: GraphItem }) {
   const { library } = useWorkspace()
-  const setSection = useUiStore((s) => s.setInspectorSection)
+  const setEditCardId = useUiStore((s) => s.setEditCardId)
   const [editing, setEditing] = useState<string | 'new' | null>(null)
   const isMine = !!library.data?.cards.some((c) => c.uri === item.id)
 
-  // "Edit" edits the user's Semble note: the one part of a card Semble picks up edits to from other apps.
-  const edit = () => {
-    const firstNote = library.data?.cards.find((c) => c.value.parentCard?.uri === item.id)
-    setEditing(firstNote?.uri ?? 'new')
-    setSection('notes', true)
-    requestAnimationFrame(() => document.getElementById('inspector-notes')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
-  }
-
   return (
     <>
-      <DetailsSection item={item} canEdit={isMine} onEdit={edit} />
+      <DetailsSection item={item} canEdit={isMine} onEdit={() => setEditCardId(item.id)} />
       <NotesSection item={item} editing={editing} setEditing={setEditing} />
       <CollectionsSection item={item} />
       <ConnectionsSection item={item} />
       {item.url && isHttpUrl(item.url) ? <SuggestionsSection key={item.url} card={item as UrlItem} /> : null}
     </>
-  )
-}
-
-// ——— Nothing selected ———
-
-function Legend() {
-  return (
-    <InspectorSection id="legend" title="Connection types" count={CONNECTION_TYPES.length}>
-      <InspectorGroup>
-        <p className="text-[13px] leading-snug text-ink-3">
-          Select a card or connection to see it here. To connect two cards, hover over one and drag from a dot on its
-          edge to the other. Shift-click or Shift-drag to select several.
-        </p>
-        <ul className="space-y-1">
-          {CONNECTION_TYPES.map((t) => (
-            <li key={t.value} className="flex items-center gap-2 text-[13px]">
-              <TypeSwatch type={t.value} withIcon width={14} />
-              <span className="shrink-0 whitespace-nowrap font-medium">{t.label}</span>
-              <span className="truncate text-ink-3">{t.description}</span>
-            </li>
-          ))}
-          <li className="flex items-center gap-2 text-[13px]">
-            <TypeSwatch type="__unknown__" withIcon width={14} />
-            <span className="shrink-0 whitespace-nowrap font-medium">Other</span>
-            <span className="text-ink-3">Type this app does not know</span>
-          </li>
-        </ul>
-      </InspectorGroup>
-    </InspectorSection>
   )
 }
 
@@ -449,9 +412,16 @@ function Legend() {
 export function Inspector() {
   const selected = useUiStore((s) => s.selected)
   const { itemsById, linksById, connectionRecords } = useWorkspace()
-  const count = selected.nodes.length + selected.edges.length
-  const item = selected.nodes.length === 1 && count === 1 ? itemsById.get(selected.nodes[0]!) : undefined
-  const link = selected.edges.length === 1 && count === 1 ? linksById.get(selected.edges[0]!) : undefined
+  const shown = selected.nodes.length + selected.edges.length > 0
+
+  // While sliding out, keep showing the last selection until it is off screen.
+  const [lastSelected, setLastSelected] = useState(selected)
+  if (shown && lastSelected !== selected) setLastSelected(selected)
+  const view = shown ? selected : lastSelected
+
+  const count = view.nodes.length + view.edges.length
+  const item = view.nodes.length === 1 && count === 1 ? itemsById.get(view.nodes[0]!) : undefined
+  const link = view.edges.length === 1 && count === 1 ? linksById.get(view.edges[0]!) : undefined
 
   // Start each new selection at the top of the stack.
   const scrollRef = useRef<HTMLElement>(null)
@@ -464,8 +434,14 @@ export function Inspector() {
     <aside
       ref={scrollRef}
       aria-label="Inspector"
-      className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 flex flex-col gap-2 overflow-y-auto overscroll-contain [scrollbar-width:thin]"
-      style={{ width: INSPECTOR_WIDTH + INSPECTOR_INSET * 2, padding: INSPECTOR_INSET }}
+      aria-hidden={!shown}
+      inert={!shown}
+      className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 flex flex-col gap-2 overflow-y-auto overscroll-contain transition-transform duration-150 ease-out [scrollbar-width:thin] motion-reduce:transition-none"
+      style={{
+        width: INSPECTOR_WIDTH + INSPECTOR_INSET * 2,
+        padding: INSPECTOR_INSET,
+        transform: shown ? undefined : 'translateX(100%)',
+      }}
     >
       {item ? (
         <CardInspector key={item.id} item={item} />
@@ -477,9 +453,7 @@ export function Inspector() {
         <InspectorSection id="selection" title="Selection" count={count}>
           <SelectionPanel />
         </InspectorSection>
-      ) : (
-        <Legend />
-      )}
+      ) : null}
     </aside>
   )
 }
