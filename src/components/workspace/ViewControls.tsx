@@ -1,6 +1,7 @@
 import { Panel, useReactFlow, useStore } from '@xyflow/react'
 import { useCallback, useEffect } from 'react'
 import { FOCUS_PADDING, fitPadding } from '../../graph/viewport'
+import { isTyping, overlayOpen } from './shortcuts'
 import { useMinimapFits } from './useMinimapFits'
 import { motion } from '../../preferences/appearance'
 import { useUiStore } from '../../state/uiStore'
@@ -74,9 +75,7 @@ export function ViewControls() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      const target = e.target as HTMLElement | null
-      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
-      if (document.querySelector('dialog[open], [role="dialog"]')) return
+      if (isTyping(e.target) || overlayOpen()) return
       const actions: Record<string, () => void> = {
         '+': () => zoomIn({ duration: motion(DURATION) }),
         '=': () => zoomIn({ duration: motion(DURATION) }),

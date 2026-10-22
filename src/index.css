@@ -153,3 +153,29 @@
   animation-iteration-count: 1 !important;
   scroll-behavior: auto !important;
 }
+
+/* Command bar live preview: everything but the previewed cards and connections fades back. */
+.spotlighting .react-flow__node,
+.spotlighting .react-flow__edge {
+  opacity: 0.18;
+  transition: opacity 150ms ease-out;
+}
+
+/* Command bar: a light backdrop so the live preview on the canvas stays visible. */
+.command-bar::backdrop {
+  background: rgb(0 0 0 / 0.18);
+}
+.command-bar[open] {
+  animation: command-bar-in 140ms ease-out;
+}
+@keyframes command-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .command-bar[open] {
+    animation: none;
+  }
+}

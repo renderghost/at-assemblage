@@ -20,7 +20,7 @@ import { NODE_HEIGHT, NODE_WIDTH } from '../../graph/layout'
 import { FOCUS_PADDING, INSPECTOR_RESERVED, fitPadding } from '../../graph/viewport'
 import { motion } from '../../preferences/appearance'
 import { styleForType } from '../../services/sources/semble/connectionTypes'
-import { useUiStore } from '../../state/uiStore'
+import { useUiStore, type SelectionIds } from '../../state/uiStore'
 import { CardNode } from './CardNode'
 import type { AppNode } from './canvasNodes'
 import { CollectionNode } from './CollectionNode'
@@ -51,6 +51,15 @@ function pruneSelection(kind: 'nodes' | 'edges', before: Set<string>, now: Set<s
   if (kept.length !== selected[kind].length) setSelected({ ...selected, [kind]: kept })
 }
 
+/** Keeps the command bar's previewed cards and connections at full strength; the rest dim (index.css). */
+function spotlightCss({ nodes, edges }: SelectionIds): string {
+  const sel = [
+    ...nodes.map((id) => `.react-flow__node[data-id="${CSS.escape(id)}"]`),
+    ...edges.map((id) => `.react-flow__edge[data-id="${CSS.escape(id)}"]`),
+  ]
+  return sel.length ? `.spotlighting :is(${sel.join(', ')}) { opacity: 1; }` : ''
+}
+
 export function GraphCanvas() {
   const { data, visible, itemsById, activeGroupIds } = useWorkspace()
   const { fitView, screenToFlowPosition } = useReactFlow<AppNode, AppEdge>()
@@ -65,6 +74,8 @@ export function GraphCanvas() {
   const inspectorShown = useInspectorShown()
   const showMinimap = useUiStore((s) => s.preferences.showMinimap) && minimapFits
   const selectionRequest = useUiStore((s) => s.selectionRequest)
+  const focusRequest = useUiStore((s) => s.focusRequest)
+  const spotlight = useUiStore((s) => s.canvasSpotlight)
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null)
 
   // Two presentations share everything but node layout: flat cards, or collections as containers.
@@ -72,6 +83,11 @@ export function GraphCanvas() {
   const flat = useFlatLayout(!containersOn)
   const containers = useContainerLayout(containersOn)
   const derivedNodes: AppNode[] = containersOn ? containers.nodes : flat.nodes
+
+  // A zoom to cards or connections that may not be on the canvas yet (the command bar adds their
+  // collections first): retried as nodes arrive and are measured, for a few seconds.
+  const pendingFocus = useRef<(SelectionIds & { until: number }) | null>(null)
+  const nodesRef = useRef<AppNode[]>([])
 
   // Fit the view whenever content first appears for a set of collections (load, reload, ticking
   // collections, switching presentation), so nothing starts off screen.
@@ -83,7 +99,12 @@ export function GraphCanvas() {
     fittedFor.current = scopeKey
     const { selected } = useUiStore.getState()
     const padding = fitPadding(selected.nodes.length + selected.edges.length > 0)
-    requestAnimationFrame(() => requestAnimationFrame(() => fitView({ padding, duration: motion(0) })))
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        // A requested zoom (e.g. to a card just revealed) wins over fitting everything.
+        if (!pendingFocus.current) fitView({ padding, duration: motion(0) })
+      }),
+    )
   }, [hasNodes, scopeKey, fitView])
 
   const derivedEdges: AppEdge[] = useMemo(() => {
@@ -184,6 +205,40 @@ export function GraphCanvas() {
     })
   }, [edges, nodes])
 
+  const linksRef = useRef(data.links)
+  useEffect(() => {
+    linksRef.current = data.links
+  }, [data.links])
+  const tryFocus = useCallback(() => {
+    const want = pendingFocus.current
+    if (!want) return
+    if (Date.now() > want.until) {
+      pendingFocus.current = null
+      return
+    }
+    const ids = new Set(want.nodes)
+    for (const id of want.edges) {
+      const link = linksRef.current.find((l) => l.id === id)
+      if (!link) return
+      ids.add(link.sourceId)
+      ids.add(link.targetId)
+    }
+    const byId = new Map(nodesRef.current.map((n) => [n.id, n]))
+    if (ids.size === 0 || ![...ids].every((id) => byId.get(id)?.measured?.width)) return
+    pendingFocus.current = null
+    requestAnimationFrame(() =>
+      fitView({ nodes: [...ids].map((id) => ({ id })), padding: FOCUS_PADDING, duration: motion(300), maxZoom: 1.2 }),
+    )
+  }, [fitView])
+  const focusOn = useCallback(
+    (ids: SelectionIds) => {
+      if (ids.nodes.length + ids.edges.length === 0) return
+      pendingFocus.current = { ...ids, until: Date.now() + 4000 }
+      tryFocus()
+    },
+    [tryFocus],
+  )
+
   // Programmatic selection from the inspector or search.
   useEffect(() => {
     if (!selectionRequest) return
@@ -192,15 +247,16 @@ export function GraphCanvas() {
     setNodes((ns) => ns.map((n) => ({ ...n, selected: nodeIds.has(n.id) })))
     setEdges((es) => es.map((e) => ({ ...e, selected: edgeIds.has(e.id) })))
     useUiStore.getState().setSelected({ nodes: [...nodeIds], edges: [...edgeIds] })
-    const focus = [...nodeIds]
-    for (const id of edgeIds) {
-      const link = data.links.find((l) => l.id === id)
-      if (link) focus.push(link.sourceId, link.targetId)
-    }
-    if (selectionRequest.focus && focus.length) fitView({ nodes: focus.map((id) => ({ id })), padding: FOCUS_PADDING, duration: motion(300), maxZoom: 1.2 })
+    if (selectionRequest.focus) focusOn({ nodes: selectionRequest.nodes, edges: selectionRequest.edges })
     // Only when a new request arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionRequest?.nonce])
+
+  useEffect(() => {
+    if (focusRequest) focusOn({ nodes: focusRequest.nodes, edges: focusRequest.edges })
+    // Only when a new request arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRequest?.nonce])
 
   // Only user-driven select/deselect changes update the store. React Flow's onSelectionChange would
   // also fire when we swap an edge's id, briefly reporting an empty selection.
@@ -244,10 +300,10 @@ export function GraphCanvas() {
   )
 
   // React Flow applies the change; the active presentation saves positions once a move ends.
-  const nodesRef = useRef<AppNode[]>([])
   useEffect(() => {
     nodesRef.current = nodes
-  }, [nodes])
+    tryFocus()
+  }, [nodes, tryFocus])
   const handleNodesChange = useCallback(
     (changes: NodeChange<AppNode>[]) => {
       onNodesChange(changes)
@@ -278,7 +334,9 @@ export function GraphCanvas() {
 
   return (
     <div className="h-full w-full">
+      {spotlight ? <style>{spotlightCss(spotlight)}</style> : null}
       <ReactFlow
+        className={spotlight ? 'spotlighting' : undefined}
         nodes={nodes}
         edges={displayEdges}
         nodeTypes={nodeTypes}

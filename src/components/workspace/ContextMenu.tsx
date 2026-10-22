@@ -5,7 +5,7 @@ import { rkeyOf } from '../../services/atproto/aturi'
 import { isHttpUrl } from '../../services/sources/url'
 import { useUiStore } from '../../state/uiStore'
 import { Icon, type IconName } from '../ui/Icon'
-import { NEW_CARD_SHORTCUT } from './NewCardDialog'
+import { NEW_CARD_SHORTCUT } from './shortcuts'
 import { useWorkspace } from './WorkspaceContext'
 
 type Item =
@@ -15,7 +15,7 @@ type Item =
 
 export const sembleCollectionPage = (handle: string, uri: string) => `${config.sembleWeb}/profile/${handle}/collections/${rkeyOf(uri)}`
 
-const sembleUrlPage = (url: string) => `${config.sembleWeb}/url/${url.split('/').map(encodeURIComponent).join('/')}`
+export const sembleUrlPage = (url: string) => `${config.sembleWeb}/url/${url.split('/').map(encodeURIComponent).join('/')}`
 
 /**
  * Right-click menu for the canvas: "New card" on empty space (placed where

@@ -118,6 +118,13 @@ type UiState = {
   deleteCollectionId: string | null
   contextMenu: ContextMenuState | null
   deleteCardId: string | null
+  commandBarOpen: boolean
+  /** The new-collection form, optionally with a name typed elsewhere (the command bar). */
+  newCollectionRequest: { name?: string } | null
+  /** Pan and zoom to these (waiting for them to appear), without changing the selection. */
+  focusRequest: (SelectionIds & { nonce: number }) | null
+  /** The command bar's live preview: everything else on the canvas is dimmed. */
+  canvasSpotlight: SelectionIds | null
 
   setSelectedGroupIds: (ids: string[]) => void
   toggleGroup: (id: string) => void
@@ -167,6 +174,11 @@ type UiState = {
   setDeleteCollectionId: (id: string | null) => void
   setContextMenu: (menu: ContextMenuState | null) => void
   setDeleteCardId: (id: string | null) => void
+  setCommandBarOpen: (open: boolean) => void
+  openNewCollection: (request?: { name?: string }) => void
+  closeNewCollection: () => void
+  requestFocus: (ids: SelectionIds) => void
+  setCanvasSpotlight: (spotlight: SelectionIds | null) => void
   reset: () => void
 }
 
@@ -193,6 +205,10 @@ const initial = {
   deleteCollectionId: null as string | null,
   contextMenu: null as ContextMenuState | null,
   deleteCardId: null as string | null,
+  commandBarOpen: false,
+  newCollectionRequest: null as UiState['newCollectionRequest'],
+  focusRequest: null as UiState['focusRequest'],
+  canvasSpotlight: null as SelectionIds | null,
 }
 
 let noticeId = 0
@@ -283,6 +299,11 @@ export const useUiStore = create<UiState>()((set) => ({
   setDeleteCollectionId: (deleteCollectionId) => set({ deleteCollectionId }),
   setContextMenu: (contextMenu) => set({ contextMenu }),
   setDeleteCardId: (deleteCardId) => set({ deleteCardId }),
+  setCommandBarOpen: (commandBarOpen) => set({ commandBarOpen }),
+  openNewCollection: (request = {}) => set({ newCollectionRequest: request }),
+  closeNewCollection: () => set({ newCollectionRequest: null }),
+  requestFocus: (ids) => set((s) => ({ focusRequest: { ...ids, nonce: (s.focusRequest?.nonce ?? 0) + 1 } })),
+  setCanvasSpotlight: (canvasSpotlight) => set({ canvasSpotlight }),
   // Signing out clears session state but keeps this browser's preferences and remembered UI state.
   reset: () => set({ ...initial, sidebarOpen: loadSidebarOpen(), inspectorSections: loadSections(), preferences: loadPreferences() }),
 }))
