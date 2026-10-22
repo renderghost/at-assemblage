@@ -81,7 +81,7 @@ Each type has an icon, a colour and a dash pattern, so colour is never the only 
 
 ### Adding cards and collections
 
-**Cards.** Click **New card** at the top of the sidebar, press `⌘K` / `Ctrl+K`, or right-click empty canvas and choose **New card** (the card is then placed where you clicked). The form follows Semble's: URL, optional note, and the collections to add the card to. The collections shown on the canvas are ticked by default. A preview prefills the title, which you can edit.
+**Cards.** Click **New card** at the top of the sidebar, press `N`, paste a link into the command bar, or right-click empty canvas and choose **New card** (the card is then placed where you clicked). The form follows Semble's: URL, optional note, and the collections to add the card to. The collections shown on the canvas are ticked by default. A preview prefills the title, which you can edit.
 
 Everything is written in **one `applyWrites` commit**, exactly as Semble would write it:
 
@@ -169,6 +169,43 @@ Changes are a draft until **Save changes**, which is disabled while nothing diff
 | | Load site icons and images | on | Favicons, page thumbnails and Semble contributors' avatars, loaded from the sites they belong to. Your own avatar comes from your PDS and always shows. |
 
 Preferences survive sign-out. Sidebar and inspector open/closed state is remembered separately, as UI state.
+
+### Command bar
+
+`⌘K` / `Ctrl+K` (or **Search or run a command** under New card) opens a bar for doing almost anything from the keyboard. It's modelled on Raycast: results on the left, a preview of the highlighted one on the right, and the keys along the bottom.
+
+**With nothing typed** it shows, in order:
+- **Suggestions** for the selection: for one card, connect it, open its page, edit or delete it; for two cards, connect them either way; for a connection, change its type, reverse it, edit its note or delete it; for a collection, collapse, fit or hide it.
+- **Recent** things you chose, ranked by frecency (how often, fading with a one-week half-life; stored per browser).
+- Then the commands, by section: **Create**, **Canvas**, **Settings**, **Help & account**.
+
+**Type to search** your whole library, not just the canvas. Results are fuzzy-ranked: the start of a title beats the start of a word, which beats any substring, which beats letters in order (`rdgst` finds radioghost). Matched letters are highlighted.
+
+| Kind | Searched in | Enter |
+| --- | --- | --- |
+| Cards | title, site, URL, description, your Semble notes, your Margin notes | Shows it: adds every collection it's in (keeping what's shown), clears filters if they'd hide it, opens a collapsed box, then selects and zooms to it. A card in no collection opens its actions instead. |
+| Collections | name, description | Adds it to the canvas and zooms to it. |
+| Connections | their notes | Shows one end's collections if needed, then selects it. |
+| Commands | title and keywords | Runs it. |
+
+A matched note or description shows as an excerpt under the title. A pasted link (`https://…` or `www.…`) is offered first as **Add card**, with its title and image fetched for the preview (when link previews are on); if it's already in your library, that card is listed too. With no results, the bar offers **New collection “…”** and **Add a card**.
+
+**Live preview.** As you move through results, the canvas glides to each card, connection or collection that's on it, landing below the bar, and everything else fades back. `Esc` returns the canvas to where it was; choosing something keeps it.
+
+**Actions.** `⌘K` (or `→` at the end of the field) on a highlighted result lists everything you can do with it, with the preview kept:
+- **cards:** show or select, connect to…, connect the selected card to this, open page, view on Semble, copy URL, edit, delete
+- **collections:** show or zoom, hide, show only this one, collapse or expand, fit to cards, new card in it, edit, view on Semble, delete
+- **connections:** show, change type, reverse direction, edit note, delete
+
+**Connecting from the keyboard.** **Connect to…** asks for the target (any card in your library, searched the same way), then the type, then an optional note. Recommended type and default type work as in the connection editor (the recommended one is marked, and chosen for you if Preferences says so). Enter on the note saves. If neither card is on the canvas, the first one is shown.
+
+**Settings.** Every preference is a command that applies at once: search "dark", "angled", "minimap" or "privacy". Each shows its current value. **Open Preferences…** opens the dialog.
+
+**Keys.** `↑` `↓` (or `Ctrl+N` / `Ctrl+P`) move, `Page Up` / `Page Down` jump, `Enter` runs, `⌘K` or `→` opens actions, `⌫` in an empty field goes back, and `Esc` goes back and then closes. **Keyboard shortcuts** lists every shortcut in the app. The bar doesn't open over another dialog. It's an ARIA combobox and listbox (`aria-activedescendant`), announces the result count, returns focus on close, and follows Preferences → Text size and Reduce motion.
+
+**Shortcuts:** `⌘K` / `Ctrl+K` command bar, `N` new card (it used to be `⌘K`), `⌘B` / `Ctrl+B` sidebar, `1` fit view, `2` zoom to selection, `0` 100%, `+` / `−` zoom, `Delete` delete selected connections. Single-key shortcuts don't fire while you're typing in a text field.
+
+**Adding a command.** Commands come from providers in `src/commands/providers.ts`: functions from a `CommandContext` (the search index, what's on the canvas, the selection, preferences, and helpers to reveal, connect and edit) to a list of commands. A provider returns only the commands that make sense right now. A command has an id, title, section, icon, optional keywords, shortcut, description and current value, and a `run` that either does something (the bar closes) or returns `{ push: view }` to open a sub-view, as **Connect to…** does. Set `listed: true` to show it with an empty query; otherwise it's found by searching. Rows, sub-views and actions for cards, collections and connections are in `src/commands/entities.ts`.
 
 ### Suggestions from Semble
 
@@ -352,6 +389,8 @@ npm test
 | `src/services/linkPreview.test.ts` | Preview mapping; failure and disabled cases |
 | `src/services/sources/semble/appview.test.ts` | Semble API calls (plain GET, no credentials), lenient response validation, error mapping |
 | `src/services/sources/semble/recommendType.test.ts` | Same-resource signals (DOI, ISBN, archive copies, cosmetic URL differences) and staying silent for different pages. Consensus thresholds (2+ people, majority, same direction, one vote per person, own connections and unknown types excluded). Same-resource takes priority. |
+| `src/commands/match.test.ts`, `src/commands/searchIndex.test.ts` | Command bar ranking (prefix, word start, substring, letters in order; accents ignored), all-words matching with highlights and excerpts; indexing every library card with all its collections, Semble and Margin notes and connection count; connections by note |
+| `src/commands/recents.test.ts`, `src/commands/root.test.ts` | Frecency ranking and bad stored data; providers offering only settings you aren't on and suggestions for one or two selected cards; the first page's sections, recents, ranking commands against cards, pasted links, no-results fallbacks, loading and error rows |
 | `src/services/sources/semble/suggestions.test.ts` | Direction from either end (including `www.` variants), skipping your own connections, merging curators and ranking, flagging pages in your library and connections already made, de-duplicating similar pages |
 
 The integration tests use `src/test/fakePds.ts`. This is an in-memory PDS, PLC directory and handle resolver. The real `@atproto/lex` client and `PasswordSession` run against it over `fetch`, including token expiry, revocation, cursors and injected failures. Like a real PDS, it hashes each created record as received to produce its CID.
@@ -448,9 +487,25 @@ A run in Chrome covered the account menu and Preferences, with Semble's API mock
 - at 800×520 the dialog fits, its body scrolls and the footer stays in view
 - no console errors
 
+Two runs in Chrome covered the command bar:
+- `⌘K` opening it; `N` opening New card (also from a focused checkbox)
+- searching "radio": the card highlighted, spotlighted and glided to; `Esc` closing and restoring the view
+- searching an outside card and pressing Enter: its collection added, the card selected
+- a card's actions with `⌘K`, then **Connect to…** → a target → **Supports** → a note → Enter: the record on the PDS had the type and note
+- "dark" → **Theme: Dark** applied
+- a pasted new URL offering **Add card** first; a known URL listing its card once
+- no results offering **New collection “…”** and **Add a card**
+- a collection found by name and shown; a connection found by its note and selected
+- Suggestions for a selected connection, and **Reverse direction** swapping the record's ends
+- two selected cards offering both directions; recents after use; **Keyboard shortcuts**; `⌫` back; `Esc` close
+- not opening over the New card dialog
+- dark theme with Larger text; at 600px wide the preview pane hides
+- no console errors
+
 ## Known limitations
 
 - **Collections are containers or flat; the hub-node presentation is still to come** ([#16](https://github.com/renderghost/at-assemblage/issues/16)).
+- **The command bar doesn't yet add notes, retype several connections at once, or arrange cards** ([#17](https://github.com/renderghost/at-assemblage/issues/17)); use the inspector for those. Recents and the live preview's spotlight are per browser.
 - **Dragging a card into another collection's box doesn't change its collections.** Positions only; use Edit card.
 - **Box layouts are per browser**, like card positions.
 - **Own records only.** Cards that other people added to your open collections live in their repos and are not loaded. The same applies to other people's connections and Margin notes. Reading those needs an AppView.
