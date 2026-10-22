@@ -7,6 +7,7 @@ import { ConnectionEditor } from './ConnectionEditor'
 import { DeleteConnectionDialog } from './DeleteConnectionDialog'
 import { GraphCanvas } from './GraphCanvas'
 import { DeleteCardDialog, EditCardDialog } from './CardDialogs'
+import { DeleteCollectionDialog, EditCollectionDialog } from './CollectionDialogs'
 import { ContextMenu } from './ContextMenu'
 import { Inspector } from './Inspector'
 import { NewCardDialog, useNewCardShortcut } from './NewCardDialog'
@@ -106,6 +107,8 @@ export function Workspace() {
         <ContextMenu />
         <NewCardDialog />
         <EditCardDialog />
+        <EditCollectionDialog />
+        <DeleteCollectionDialog />
         <DeleteCardDialog />
         <DeleteConnectionDialog />
         <ReconnectDialog />

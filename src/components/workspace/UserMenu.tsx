@@ -39,10 +39,9 @@ export function UserMenu() {
   const { handle, did } = useAuth()
   const { signOut } = useAuthContext()
   const profile = useProfile()
-  const showEdgeLabels = useUiStore((s) => s.showEdgeLabels)
-  const setShowEdgeLabels = useUiStore((s) => s.setShowEdgeLabels)
-  const showExternal = useUiStore((s) => s.showExternal)
-  const setShowExternal = useUiStore((s) => s.setShowExternal)
+  const preferences = useUiStore((s) => s.preferences)
+  const setPreference = useUiStore((s) => s.setPreference)
+  const resetPreferences = useUiStore((s) => s.resetPreferences)
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -117,12 +116,40 @@ export function UserMenu() {
             </div>
           </div>
           <fieldset className="space-y-2 border-b border-line px-3 py-3">
-            <legend className="sr-only">Display settings</legend>
+            <legend className="flex w-full items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+              Settings
+            </legend>
+            <div role="radiogroup" aria-label="Collections on the canvas" className="space-y-1 text-[13px]">
+              <div className="text-ink-2">Collections on the canvas</div>
+              <div className="flex gap-1">
+                {(
+                  [
+                    ['containers', 'Containers'],
+                    ['flat', 'Flat'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label
+                    key={value}
+                    className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-line px-2 py-1 has-[:checked]:border-accent has-[:checked]:bg-accent-soft"
+                  >
+                    <input
+                      type="radio"
+                      name="collection-presentation"
+                      value={value}
+                      checked={preferences.collectionPresentation === value}
+                      onChange={() => setPreference('collectionPresentation', value)}
+                      className="accent-[var(--color-accent)]"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
             <label className="flex items-start gap-2 text-[13px]">
               <input
                 type="checkbox"
-                checked={showEdgeLabels}
-                onChange={(e) => setShowEdgeLabels(e.target.checked)}
+                checked={preferences.showEdgeLabels}
+                onChange={(e) => setPreference('showEdgeLabels', e.target.checked)}
                 className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
               />
               Always show connection labels
@@ -130,8 +157,8 @@ export function UserMenu() {
             <label className="flex items-start gap-2 text-[13px]">
               <input
                 type="checkbox"
-                checked={showExternal}
-                onChange={(e) => setShowExternal(e.target.checked)}
+                checked={preferences.showExternal}
+                onChange={(e) => setPreference('showExternal', e.target.checked)}
                 className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
               />
               <span>
@@ -139,6 +166,9 @@ export function UserMenu() {
                 <span className="block text-[12px] text-ink-3">Dashed cards at the far end of your connections.</span>
               </span>
             </label>
+            <button type="button" className="text-[12px] text-accent hover:underline" onClick={resetPreferences}>
+              Reset settings to defaults
+            </button>
           </fieldset>
           <div className="p-1">
             <button

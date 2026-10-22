@@ -21,8 +21,20 @@ type FormValues = z.infer<typeof schema>
 const inputClass =
   'w-full rounded-md border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none aria-[invalid=true]:border-danger'
 
-function NewCollectionForm({ onDone }: { onDone: () => void }) {
-  const create = useCreateCollection()
+type CollectionFormProps = {
+  initial?: FormValues
+  submitLabel: string
+  busy: boolean
+  error?: string | null
+  note: string
+  onSubmit: (values: FormValues) => void
+  onCancel: () => void
+  /** Extra action on the left of the footer (e.g. Delete). */
+  footerStart?: React.ReactNode
+}
+
+/** Name, description and Personal/Open: the fields of a Semble collection, with the lexicon's limits. */
+export function CollectionForm({ initial, submitLabel, busy, error, note, onSubmit, onCancel, footerStart }: CollectionFormProps) {
   const {
     register,
     handleSubmit,
@@ -30,13 +42,13 @@ function NewCollectionForm({ onDone }: { onDone: () => void }) {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', description: '', accessType: 'CLOSED' },
+    defaultValues: initial ?? { name: '', description: '', accessType: 'CLOSED' },
   })
   const name = useWatch({ control, name: 'name' })
   const description = useWatch({ control, name: 'description' })
 
   return (
-    <form noValidate className="space-y-4" onSubmit={handleSubmit((values) => create.mutate(values, { onSuccess: onDone }))}>
+    <form noValidate className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
       <div className="space-y-1.5">
         <label htmlFor="collection-name" className="flex justify-between text-sm font-medium">
           Name
@@ -96,19 +108,36 @@ function NewCollectionForm({ onDone }: { onDone: () => void }) {
         </div>
       </fieldset>
 
-      {create.isError ? <Alert tone="error">Collection not created. {describeError(create.error).message}</Alert> : null}
+      {error ? <Alert tone="error">{error}</Alert> : null}
 
-      <p className="text-[12px] text-ink-3">Saved to your PDS as a Semble collection; it appears in Semble too.</p>
+      <p className="text-[12px] text-ink-3">{note}</p>
 
-      <div className="flex justify-end gap-2 border-t border-line pt-3">
-        <Button onClick={onDone} disabled={create.isPending}>
-          Cancel
-        </Button>
-        <Button type="submit" variant="primary" busy={create.isPending}>
-          Create collection
-        </Button>
+      <div className="flex items-center justify-between gap-2 border-t border-line pt-3">
+        <div>{footerStart}</div>
+        <div className="flex gap-2">
+          <Button onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" busy={busy}>
+            {submitLabel}
+          </Button>
+        </div>
       </div>
     </form>
+  )
+}
+
+function NewCollectionForm({ onDone }: { onDone: () => void }) {
+  const create = useCreateCollection()
+  return (
+    <CollectionForm
+      submitLabel="Create collection"
+      busy={create.isPending}
+      error={create.isError ? `Collection not created. ${describeError(create.error).message}` : null}
+      note="Saved to your PDS as a Semble collection; it appears in Semble too."
+      onSubmit={(values) => create.mutate(values, { onSuccess: onDone })}
+      onCancel={onDone}
+    />
   )
 }
 
