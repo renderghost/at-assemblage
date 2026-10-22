@@ -3,6 +3,7 @@ import { useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 import { useCreateCollection } from '../../queries/create'
 import { describeError } from '../../services/atproto/errors'
+import { useUiStore } from '../../state/uiStore'
 import { Alert } from '../ui/Alert'
 import { Button } from '../ui/Button'
 import { Dialog } from '../ui/Dialog'
@@ -127,10 +128,11 @@ export function CollectionForm({ initial, submitLabel, busy, error, note, onSubm
   )
 }
 
-function NewCollectionForm({ onDone }: { onDone: () => void }) {
+function NewCollectionForm({ name, onDone }: { name?: string; onDone: () => void }) {
   const create = useCreateCollection()
   return (
     <CollectionForm
+      initial={name ? { name, description: '', accessType: 'CLOSED' } : undefined}
       submitLabel="Create collection"
       busy={create.isPending}
       error={create.isError ? `Collection not created. ${describeError(create.error).message}` : null}
@@ -141,10 +143,13 @@ function NewCollectionForm({ onDone }: { onDone: () => void }) {
   )
 }
 
-export function NewCollectionDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** The new-collection form, driven by `newCollectionRequest` in the UI store. */
+export function NewCollectionDialog() {
+  const request = useUiStore((s) => s.newCollectionRequest)
+  const close = useUiStore((s) => s.closeNewCollection)
   return (
-    <Dialog open={open} title="New collection" onClose={onClose}>
-      <NewCollectionForm onDone={onClose} />
+    <Dialog open={!!request} title="New collection" onClose={close}>
+      <NewCollectionForm name={request?.name} onDone={close} />
     </Dialog>
   )
 }
