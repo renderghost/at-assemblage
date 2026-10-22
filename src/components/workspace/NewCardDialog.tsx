@@ -92,6 +92,7 @@ function NewCardForm({ request, onDone }: { request: AddCardRequest; onDone: () 
         imageUrl,
         note,
         collections: chosen.flatMap((id) => (existing?.inCollections.has(id) ? [] : (collectionRecords.get(id) ?? []))),
+        position: request.position,
       },
       {
         onSuccess: (plan) => {
@@ -251,6 +252,23 @@ function NewCardForm({ request, onDone }: { request: AddCardRequest; onDone: () 
       </div>
     </form>
   )
+}
+
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+export const NEW_CARD_SHORTCUT = isMac ? '⌘K' : 'Ctrl+K'
+
+/** ⌘K / Ctrl+K opens the add-card form from anywhere, including text fields, unless a dialog is open. */
+export function useNewCardShortcut() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'k' || !(isMac ? e.metaKey : e.ctrlKey) || e.altKey || e.shiftKey) return
+      if (document.querySelector('dialog[open]')) return
+      e.preventDefault()
+      useUiStore.getState().openAddCard()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 }
 
 /** The add-card dialog, driven by `addCardRequest` in the UI store. */

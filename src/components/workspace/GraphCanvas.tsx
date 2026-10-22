@@ -7,7 +7,6 @@ import {
   useEdgesState,
   useNodesState,
   useReactFlow,
-  useStore,
   type Connection,
   type EdgeChange,
   type EdgeSelectionChange,
@@ -17,13 +16,14 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { chooseSides, sourceHandleId, targetHandleId } from '../../graph/edgeSides'
-import { FIT_PADDING, FOCUS_PADDING, INSPECTOR_RESERVED, MINIMAP_MIN_CANVAS_WIDTH } from '../../graph/viewport'
+import { FOCUS_PADDING, INSPECTOR_RESERVED, fitPadding } from '../../graph/viewport'
 import { layoutGraph, NODE_HEIGHT, NODE_WIDTH, type Positions } from '../../graph/layout'
 import { layoutStorageKey, loadPositions, savePositions } from '../../graph/positions'
 import { styleForType } from '../../services/sources/semble/connectionTypes'
 import { useUiStore } from '../../state/uiStore'
 import { CardNode, type CardNodeType } from './CardNode'
 import { ConnectionEdge, type ConnectionEdgeType } from './ConnectionEdge'
+import { useInspectorShown, useMinimapFits } from './useMinimapFits'
 import { ViewControls } from './ViewControls'
 import { useWorkspace } from './WorkspaceContext'
 
@@ -54,17 +54,18 @@ function pruneSelection(kind: 'nodes' | 'edges', before: Set<string>, now: Set<s
 }
 
 export function GraphCanvas() {
-  const canvasWidth = useStore((s) => s.width)
   const { did } = useAuth()
   const { data, visible, activeGroupIds, groupNames, annotationsByItem, itemsById } = useWorkspace()
-  const { fitView, getNode } = useReactFlow<CardNodeType, ConnectionEdgeType>()
+  const { fitView, getNode, screenToFlowPosition } = useReactFlow<CardNodeType, ConnectionEdgeType>()
 
   const layoutKey = useUiStore((s) => s.layoutKey)
   const positions = useUiStore((s) => s.positions)
   const draft = useUiStore((s) => s.draft)
   const showEdgeLabels = useUiStore((s) => s.showEdgeLabels)
   // The minimap and view controls both sit along the bottom; on a narrow canvas only the controls fit.
-  const showMinimap = useUiStore((s) => s.showMinimap) && canvasWidth >= MINIMAP_MIN_CANVAS_WIDTH
+  const minimapFits = useMinimapFits()
+  const inspectorShown = useInspectorShown()
+  const showMinimap = useUiStore((s) => s.showMinimap) && minimapFits
   const selectionRequest = useUiStore((s) => s.selectionRequest)
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null)
 
@@ -82,6 +83,18 @@ export function GraphCanvas() {
   )
   useEffect(() => {
     if (missing.length === 0) return
+    // Cards placed explicitly (e.g. created from the context menu) skip auto-layout.
+    const { pendingPlacements } = useUiStore.getState()
+    const placed = Object.fromEntries(missing.flatMap((i) => (pendingPlacements[i.id] ? [[i.id, pendingPlacements[i.id]!]] : [])))
+    if (Object.keys(placed).length) {
+      const { positions: current, mergePositions } = useUiStore.getState()
+      mergePositions(placed)
+      savePositions(storageKey, { ...current, ...placed })
+      useUiStore.setState((s) => ({
+        pendingPlacements: Object.fromEntries(Object.entries(s.pendingPlacements).filter(([id]) => !placed[id])),
+      }))
+      return
+    }
     let cancelled = false
     const ids = new Set(missing.map((i) => i.id))
     const links = data.links.filter((l) => ids.has(l.sourceId) && ids.has(l.targetId))
@@ -98,7 +111,7 @@ export function GraphCanvas() {
           fitView({ nodes: requested.map((id) => ({ id })), padding: FOCUS_PADDING, duration: 400, maxZoom: 1.1 }),
         )
       } else if (Object.keys(current).length === 0) {
-        requestAnimationFrame(() => fitView({ padding: FIT_PADDING, duration: 300 }))
+        requestAnimationFrame(() => fitView({ padding: fitPadding(false), duration: 300 }))
       }
     })
     return () => {
@@ -296,6 +309,20 @@ export function GraphCanvas() {
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
+        onPaneContextMenu={(e) => {
+          e.preventDefault()
+          useUiStore.getState().setContextMenu({
+            kind: 'pane',
+            x: e.clientX,
+            y: e.clientY,
+            flow: screenToFlowPosition({ x: e.clientX, y: e.clientY }),
+          })
+        }}
+        onNodeContextMenu={(e, node) => {
+          e.preventDefault()
+          useUiStore.getState().requestSelection({ nodes: [node.id], edges: [] }, { focus: false })
+          useUiStore.getState().setContextMenu({ kind: 'card', x: e.clientX, y: e.clientY, cardId: node.id })
+        }}
         onReconnect={onReconnect}
         reconnectRadius={14}
         isValidConnection={isValidConnection}
@@ -316,9 +343,10 @@ export function GraphCanvas() {
           <MiniMap
             pannable
             zoomable
-            position="bottom-right"
-            // Sits left of the floating inspector.
-            style={{ marginRight: INSPECTOR_RESERVED }}
+            position="top-right"
+            // Glides left of the floating inspector while it is showing.
+            className="transition-[margin] duration-150 ease-out motion-reduce:transition-none"
+            style={{ marginRight: inspectorShown ? INSPECTOR_RESERVED : 16, marginTop: 16 }}
             ariaLabel="Minimap"
             nodeStrokeWidth={2}
             nodeColor="var(--color-line-strong)"

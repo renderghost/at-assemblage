@@ -34,7 +34,7 @@ export function SidebarToggle({ floating = false }: { floating?: boolean }) {
       aria-expanded={open}
       aria-controls="left-sidebar"
       aria-keyshortcuts={isMac ? 'Meta+B' : 'Control+B'}
-      title={`${label} (${SIDEBAR_SHORTCUT})`}
+      title={`${label} (${SIDEBAR_SHORTCUT})${open ? '' : ' · New card: ⌘K / Ctrl+K or right-click the canvas'}`}
       onClick={toggle}
       className={`inline-flex h-8 w-8 shrink-0 items-center justify-center text-ink-2 hover:bg-surface-2 hover:text-ink ${floating ? '' : 'rounded-md'}`}
     >

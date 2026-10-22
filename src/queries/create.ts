@@ -31,14 +31,16 @@ export function useCreateCard() {
   const queryClient = useQueryClient()
   const key = queryKeys.library(did)
 
-  return useMutation<NewCardPlan, Error, NewCardInput>({
+  return useMutation<NewCardPlan, Error, NewCardInput & { position?: { x: number; y: number } }>({
     mutationFn: async (input) => {
       const library =
         queryClient.getQueryData<SembleLibrary>(key) ??
         (await queryClient.fetchQuery<SembleLibrary>({ queryKey: key, queryFn: () => fetchLibrary(client, did) }))
       return commitNewCard(client, await planNewCard(did, input, library))
     },
-    onSuccess: (plan) => {
+    onSuccess: (plan, { position }) => {
+      // Recorded before the card reaches the cache, so the canvas places it here instead of auto-layout.
+      if (position && !plan.existing) useUiStore.getState().placeNewCard(plan.cardRef.uri, position)
       const strip = <V,>({ rkey: _rkey, ...rest }: StoredRecord<V> & { rkey: string }): StoredRecord<V> => rest
       queryClient.setQueryData<SembleLibrary>(key, (old) =>
         old && {
@@ -48,7 +50,8 @@ export function useCreateCard() {
         },
       )
       const { requestSelection, notify } = useUiStore.getState()
-      requestSelection({ nodes: [plan.cardRef.uri], edges: [] })
+      // Zoom to it, unless the user chose where it goes.
+      requestSelection({ nodes: [plan.cardRef.uri], edges: [] }, { focus: !position })
       const added = plan.links.length
       notify({
         tone: 'success',

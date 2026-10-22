@@ -3,13 +3,13 @@ import { describeError } from '../../services/atproto/errors'
 import { useUiStore } from '../../state/uiStore'
 import { Alert } from '../ui/Alert'
 import { Button, Spinner } from '../ui/Button'
-import { Icon } from '../ui/Icon'
 import { ConnectionEditor } from './ConnectionEditor'
 import { DeleteConnectionDialog } from './DeleteConnectionDialog'
 import { GraphCanvas } from './GraphCanvas'
-import { INSPECTOR_RESERVED } from '../../graph/viewport'
+import { DeleteCardDialog, EditCardDialog } from './CardDialogs'
+import { ContextMenu } from './ContextMenu'
 import { Inspector } from './Inspector'
-import { NewCardDialog } from './NewCardDialog'
+import { NewCardDialog, useNewCardShortcut } from './NewCardDialog'
 import { ReconnectDialog } from './ReconnectDialog'
 import { Sidebar } from './Sidebar'
 import { SidebarToggle, useSidebarShortcut } from './SidebarToggle'
@@ -78,28 +78,10 @@ function Warnings() {
   )
 }
 
-function AddCardButton() {
-  const openAddCard = useUiStore((s) => s.openAddCard)
-  return (
-    <>
-      <button
-        type="button"
-        aria-label="Add a card"
-        title="Add a card"
-        onClick={() => openAddCard()}
-        style={{ right: INSPECTOR_RESERVED }}
-        className="absolute top-4 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full bg-accent text-accent-ink shadow-lg ring-1 ring-black/5 transition hover:scale-105 hover:opacity-95 focus-visible:outline-offset-4"
-      >
-        <Icon name="plus" size={22} strokeWidth={2.4} />
-      </button>
-      <NewCardDialog />
-    </>
-  )
-}
-
 export function Workspace() {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen)
   useSidebarShortcut()
+  useNewCardShortcut()
   return (
     <ReactFlowProvider>
       <WorkspaceProvider>
@@ -115,13 +97,16 @@ export function Workspace() {
               <GraphArea />
               {sidebarOpen ? null : <SidebarToggle floating />}
               <Warnings />
-              <AddCardButton />
               <Inspector />
             </div>
             <StatusBar />
           </main>
         </div>
         <ConnectionEditor />
+        <ContextMenu />
+        <NewCardDialog />
+        <EditCardDialog />
+        <DeleteCardDialog />
         <DeleteConnectionDialog />
         <ReconnectDialog />
       </WorkspaceProvider>

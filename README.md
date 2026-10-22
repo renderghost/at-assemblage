@@ -81,7 +81,7 @@ Each type has an icon, a colour and a dash pattern, so colour is never the only 
 
 ### Adding cards and collections
 
-**Cards.** Click the round **+** button at the top right of the canvas. The form follows Semble's: URL, optional note, and the collections to add the card to. The collections shown on the canvas are ticked by default. A preview prefills the title, which you can edit.
+**Cards.** Click **New card** at the top of the sidebar, press `⌘K` / `Ctrl+K`, or right-click empty canvas and choose **New card** (the card is then placed where you clicked). The form follows Semble's: URL, optional note, and the collections to add the card to. The collections shown on the canvas are ticked by default. A preview prefills the title, which you can edit.
 
 Everything is written in **one `applyWrites` commit**, exactly as Semble would write it:
 
@@ -182,7 +182,7 @@ lexicons.json         lexicon manifest with CIDs (committed)
 - **Edge routing.** Every card has a handle on each side. Each edge attaches to the facing sides of its two cards: whichever axis has the larger clear gap, so side-by-side cards connect left↔right and stacked cards top↔bottom (`src/graph/edgeSides.ts`). This is recalculated from live positions, so edges follow a card while you drag it. Because edges use real handles, React Flow's drag-to-move anchors stay at the true ends.
 - **Layout.** ELK places cards that have no saved position yet; after that, cards stay where you put them. Manual positions are saved in `localStorage`, keyed by DID and the set of selected collections. They are never written to the PDS. A "Tidy layout" command was removed because its results weren't good enough; see [#7](https://github.com/renderghost/at-assemblage/issues/7).
 - **Left sidebar.** **Collections** and **Filters** are two tabs, so each gets the full height. Two links stay pinned above the account button: **Give feedback** (Assemblage's feedback form on userinput.app) and **Follow on Bluesky** (@assemblage.mu.social). In the tabs, a dot on the Filters tab shows when filters are active. The button left of the logo hides the sidebar (also `⌘B` / `Ctrl+B`, from anywhere except an open dialog). While it's hidden, the same button floats at the canvas's top left in exactly the same spot, matching the view controls at the bottom left. This browser remembers whether the sidebar is shown.
-- **Inspector.** A stack of cards floating over the canvas's right edge, 320px wide and 16px in from the top and right. Each section collapses on its own, and several can be open at once; this browser remembers which are open. The stack scrolls when it's taller than the canvas, and the gaps between cards pass clicks through to the canvas. Fit view, zoom to selection, the + button, the minimap and notifications all keep clear of it. For a selected card, the sections are:
+- **Inspector.** A stack of cards floating over the canvas's right edge, 320px wide and 16px in from the top and right. It slides in when something is selected and out when nothing is. Each section collapses on its own and several can be open at once; Details and Notes are open by default, and this browser remembers your choices from card to card and across visits. The stack scrolls when it's taller than the canvas, and the gaps between cards pass clicks through to the canvas. Fit view, zoom to selection, the minimap (top right) and notifications all keep clear of it while it's showing. For a selected card, the sections are:
 
   | Section | Contents |
   | --- | --- |
@@ -192,9 +192,13 @@ lexicons.json         lexicon manifest with CIDs (committed)
   | **Connections (n)** | Grouped by type, both directions; click one to select it |
   | **Suggestions (n)** | Grouped by category (Connected by others, Similar pages) |
 
-  **Edit** edits your Semble note. Semble's indexer applies edits to NOTE cards made by other apps but ignores edits to URL cards, so the note is the one part of a card we can change and have it show in Semble. Notes are updated in place, and the write is refused if the note changed elsewhere.
+  **Edit** opens the card editor, which offers what Semble's own UI does: choose the card's collections, or delete it. Collection changes are written as `collectionLink` creates and deletes in one commit. The title is read-only: Semble fetches titles itself, and its indexer ignores edits to URL cards. Your Semble note is edited in the Notes section; Semble does apply NOTE card edits. Notes are updated in place, and the write is refused if the note changed elsewhere.
 
-  With a connection selected, the inspector shows a single **Connection** section; with several things selected, a **Selection** section; with nothing selected, a collapsed **Connection types** legend.
+  **Deleting a card** removes the card, its note and its collection links in one commit. The confirm dialog offers to delete its connections too (ticked by default); if kept, they still point at the page, which then shows as an outside card.
+
+  **Right-click** a card for **Edit card…**, **Delete card…**, **Open page** and **View on Semble**; right-click empty canvas for **New card**.
+
+  With a connection selected, the inspector shows a single **Connection** section; with several things selected, a **Selection** section.
 - **App shell.** The app is fixed to the window: the page itself never scrolls, and the sidebar, canvas and inspector each scroll inside themselves. On a narrow window the sidebars keep their width and the canvas shrinks.
 - **View controls.** A toolbar floats at the bottom left of the canvas:
 
@@ -268,6 +272,7 @@ npm test
 | `src/components/auth/SignInScreen.test.tsx` | Rejecting non-App-Passwords, two-factor prompt, credential errors |
 | `src/services/sources/semble/create.test.ts` | New card, note and link records shaped like Semble's; URL validation; reusing an existing card (links only for missing collections, one note per link); a single commit whose locally computed CIDs match the PDS's; collection records and lexicon limits |
 | `src/services/sources/semble/notes.test.ts` | Adding a Semble note linked to a card, editing it in place, refusing an edit when the note changed elsewhere |
+| `src/services/sources/semble/cards.test.ts` | Changing a card's collections in one commit; deleting a card with its note, links and connections (matched by URL or AT URI), leaving unrelated records |
 | `src/services/linkPreview.test.ts` | Preview mapping; failure and disabled cases |
 | `src/services/sources/semble/appview.test.ts` | Semble API calls (plain GET, no credentials), lenient response validation, error mapping |
 | `src/services/sources/semble/recommendType.test.ts` | Same-resource signals (DOI, ISBN, archive copies, cosmetic URL differences) and staying silent for different pages. Consensus thresholds (2+ people, majority, same direction, one vote per person, own connections and unknown types excluded). Same-resource takes priority. |
