@@ -32,8 +32,9 @@
   :root {
     color-scheme: light;
   }
+  /* Dark tokens: from the system setting unless the user chose Light; or when they chose Dark. */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme='light']) {
       color-scheme: dark;
       --color-canvas: #0f1114;
       --color-surface: #171a1f;
@@ -53,6 +54,29 @@
       --color-warn: #f2c66d;
       --color-warn-soft: #362a12;
     }
+  }
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --color-canvas: #0f1114;
+    --color-surface: #171a1f;
+    --color-surface-2: #1d2127;
+    --color-line: #2b3038;
+    --color-line-strong: #3d444e;
+    --color-ink: #eceef1;
+    --color-ink-2: #b6bdc6;
+    --color-ink-3: #8d96a1;
+    --color-accent: #7ea2f5;
+    --color-accent-ink: #0f1114;
+    --color-accent-soft: #1d2a45;
+    --color-danger: #ff8a7f;
+    --color-danger-soft: #3a1c1a;
+    --color-success: #6fd39b;
+    --color-success-soft: #16301f;
+    --color-warn: #f2c66d;
+    --color-warn-soft: #362a12;
+  }
+  :root[data-theme='light'] {
+    color-scheme: light;
   }
 
   html,
@@ -89,6 +113,7 @@
   --xy-handle-border-color: var(--color-surface);
   --xy-selection-background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
   --xy-selection-border: 1px dashed var(--color-accent);
+  --xy-attribution-background-color: color-mix(in srgb, var(--color-canvas) 50%, transparent);
 }
 .react-flow__handle {
   width: 10px;
@@ -108,5 +133,49 @@
 @keyframes dashdraw {
   from {
     stroke-dashoffset: 10;
+  }
+}
+
+/* Preferences → Text size: scales the sidebar, inspector, dialogs and menus (not the canvas). */
+:root[data-text-size='large'] .ui-scale {
+  zoom: 1.143;
+}
+:root[data-text-size='larger'] .ui-scale {
+  zoom: 1.286;
+}
+
+/* Preferences → Reduce motion: always, regardless of the system setting. */
+:root[data-reduce-motion] *,
+:root[data-reduce-motion] *::before,
+:root[data-reduce-motion] *::after {
+  transition-duration: 0s !important;
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+
+/* Command bar live preview: everything but the previewed cards and connections fades back. */
+.spotlighting .react-flow__node,
+.spotlighting .react-flow__edge {
+  opacity: 0.18;
+  transition: opacity 150ms ease-out;
+}
+
+/* Command bar: a light backdrop so the live preview on the canvas stays visible. */
+.command-bar::backdrop {
+  background: rgb(0 0 0 / 0.18);
+}
+.command-bar[open] {
+  animation: command-bar-in 140ms ease-out;
+}
+@keyframes command-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .command-bar[open] {
+    animation: none;
   }
 }

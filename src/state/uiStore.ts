@@ -1,10 +1,22 @@
 import { create } from 'zustand'
+import type { CollectionLayout, ContainerLayout } from '../graph/containers'
+import { saveCollectionLayout, saveContainerLayout } from '../graph/positions'
+import { DEFAULTS, loadPreferences, saveOverrides, type PreferenceKey, type Preferences } from '../preferences/preferences'
 import { EMPTY_FILTERS, type GraphFilters } from '../graph/filters'
 import type { Position, Positions } from '../graph/layout'
 
 export type SidebarTab = 'collections' | 'filters'
 
-export type InspectorSection = 'details' | 'notes' | 'collections' | 'connections' | 'suggestions' | 'connection' | 'selection'
+export type InspectorSection =
+  | 'details'
+  | 'notes'
+  | 'collections'
+  | 'connections'
+  | 'suggestions'
+  | 'connection'
+  | 'selection'
+  | 'cards'
+  | 'people'
 
 // v2: Details and Notes now open by default.
 const SECTIONS_KEY = 'assemblage:inspector-sections:v2'
@@ -16,6 +28,8 @@ const DEFAULT_SECTIONS: Record<InspectorSection, boolean> = {
   suggestions: false,
   connection: true,
   selection: true,
+  cards: true,
+  people: false,
 }
 
 function loadSections(): Record<InspectorSection, boolean> {
@@ -65,6 +79,7 @@ export type AddCardRequest = {
 export type ContextMenuState =
   | { kind: 'pane'; x: number; y: number; flow: { x: number; y: number } }
   | { kind: 'card'; x: number; y: number; cardId: string }
+  | { kind: 'collection'; x: number; y: number; collectionId: string; flow: { x: number; y: number } }
 
 export type Notice = {
   id: number
@@ -87,9 +102,8 @@ type UiState = {
   pendingDeleteLinkIds: string[]
   /** A dragged edge end awaiting confirmation: the connection and its proposed endpoints. */
   reconnectDraft: { linkId: string; sourceId: string; targetId: string } | null
-  showEdgeLabels: boolean
-  showExternal: boolean
-  showMinimap: boolean
+  /** Effective preferences (system defaults + this browser's overrides). */
+  preferences: Preferences
   /** Left sidebar visibility; a per-browser preference, so it survives sign-out. */
   sidebarOpen: boolean
   sidebarTab: SidebarTab
@@ -99,14 +113,38 @@ type UiState = {
   addCardRequest: AddCardRequest | null
   /** Card ids whose edit / delete dialogs are open. */
   editCardId: string | null
+  /** Collection ids whose edit / delete dialogs are open. */
+  editCollectionId: string | null
+  deleteCollectionId: string | null
   contextMenu: ContextMenuState | null
   deleteCardId: string | null
+  commandBarOpen: boolean
+  /** The new-collection form, optionally with a name typed elsewhere (the command bar). */
+  newCollectionRequest: { name?: string } | null
+  /** Pan and zoom to these (waiting for them to appear), without changing the selection. */
+  focusRequest: (SelectionIds & { nonce: number }) | null
+  /** The command bar's live preview: everything else on the canvas is dimmed. */
+  canvasSpotlight: SelectionIds | null
 
   setSelectedGroupIds: (ids: string[]) => void
   toggleGroup: (id: string) => void
   loadLayout: (key: string, positions: Positions) => void
   mergePositions: (positions: Positions) => void
   movePosition: (id: string, pos: Position) => void
+  /** Container mode: the account and set of shown collections `containerLayout` belongs to. */
+  containerScope: { did: string; key: string } | null
+  containerLayout: ContainerLayout
+  /** Container mode: each collection's own layout (cards inside it, size, collapsed). */
+  collectionLayouts: Record<string, CollectionLayout>
+  loadContainers: (scope: { did: string; key: string }, layout: ContainerLayout, collections: Record<string, CollectionLayout>) => void
+  /** Updates and persists the container positions for the current scope. */
+  setContainerLayout: (layout: ContainerLayout) => void
+  /** Updates and persists collection layouts (only the given ones). */
+  setCollectionLayouts: (layouts: Record<string, CollectionLayout>) => void
+  toggleCollapsed: (groupId: string, collapsed?: boolean) => void
+  /** Asks the canvas to fit a container to its cards (it knows the measured sizes). */
+  fitCollectionRequest: { id: string; nonce: number } | null
+  requestFitCollection: (id: string) => void
   /** Positions chosen for cards that are being created; the canvas uses them instead of auto-layout. */
   pendingPlacements: Positions
   placeNewCard: (id: string, pos: Position) => void
@@ -118,9 +156,12 @@ type UiState = {
   setDraft: (draft: LinkDraft | null) => void
   requestDeleteLinks: (ids: string[]) => void
   setReconnectDraft: (draft: UiState['reconnectDraft']) => void
-  setShowEdgeLabels: (show: boolean) => void
-  setShowExternal: (show: boolean) => void
-  setShowMinimap: (show: boolean) => void
+  setPreference: <K extends PreferenceKey>(key: K, value: Preferences[K]) => void
+  /** Replaces all preferences at once (the Preferences dialog's Save). */
+  setPreferences: (preferences: Preferences) => void
+  preferencesOpen: boolean
+  setPreferencesOpen: (open: boolean) => void
+  resetPreferences: () => void
   toggleSidebar: () => void
   setSidebarTab: (tab: SidebarTab) => void
   setInspectorSection: (section: InspectorSection, open: boolean) => void
@@ -129,8 +170,15 @@ type UiState = {
   openAddCard: (request?: AddCardRequest) => void
   closeAddCard: () => void
   setEditCardId: (id: string | null) => void
+  setEditCollectionId: (id: string | null) => void
+  setDeleteCollectionId: (id: string | null) => void
   setContextMenu: (menu: ContextMenuState | null) => void
   setDeleteCardId: (id: string | null) => void
+  setCommandBarOpen: (open: boolean) => void
+  openNewCollection: (request?: { name?: string }) => void
+  closeNewCollection: () => void
+  requestFocus: (ids: SelectionIds) => void
+  setCanvasSpotlight: (spotlight: SelectionIds | null) => void
   reset: () => void
 }
 
@@ -139,21 +187,28 @@ const initial = {
   layoutKey: null as string | null,
   positions: {} as Positions,
   pendingPlacements: {} as Positions,
+  containerScope: null as UiState['containerScope'],
+  containerLayout: { groups: {}, floats: {} } as ContainerLayout,
+  collectionLayouts: {} as Record<string, CollectionLayout>,
+  fitCollectionRequest: null as UiState['fitCollectionRequest'],
   selected: { nodes: [], edges: [] } as SelectionIds,
   selectionRequest: null as UiState['selectionRequest'],
   filters: EMPTY_FILTERS,
   draft: null as LinkDraft | null,
   pendingDeleteLinkIds: [] as string[],
   reconnectDraft: null as UiState['reconnectDraft'],
-  showEdgeLabels: false,
-  showExternal: true,
-  showMinimap: true,
   sidebarTab: 'collections' as SidebarTab,
   notices: [] as Notice[],
   addCardRequest: null as AddCardRequest | null,
   editCardId: null as string | null,
+  editCollectionId: null as string | null,
+  deleteCollectionId: null as string | null,
   contextMenu: null as ContextMenuState | null,
   deleteCardId: null as string | null,
+  commandBarOpen: false,
+  newCollectionRequest: null as UiState['newCollectionRequest'],
+  focusRequest: null as UiState['focusRequest'],
+  canvasSpotlight: null as SelectionIds | null,
 }
 
 let noticeId = 0
@@ -170,6 +225,24 @@ export const useUiStore = create<UiState>()((set) => ({
   loadLayout: (layoutKey, positions) => set({ layoutKey, positions }),
   mergePositions: (positions) => set((s) => ({ positions: { ...s.positions, ...positions } })),
   movePosition: (id, pos) => set((s) => ({ positions: { ...s.positions, [id]: pos } })),
+  loadContainers: (containerScope, containerLayout, collections) =>
+    set((s) => ({ containerScope, containerLayout, collectionLayouts: { ...s.collectionLayouts, ...collections } })),
+  setContainerLayout: (containerLayout) =>
+    set((s) => {
+      if (s.containerScope) saveContainerLayout(s.containerScope.key, containerLayout)
+      return { containerLayout }
+    }),
+  setCollectionLayouts: (layouts) =>
+    set((s) => {
+      if (s.containerScope) for (const [id, layout] of Object.entries(layouts)) saveCollectionLayout(s.containerScope.did, id, layout)
+      return { collectionLayouts: { ...s.collectionLayouts, ...layouts } }
+    }),
+  toggleCollapsed: (groupId, collapsed) => {
+    const { collectionLayouts, setCollectionLayouts } = useUiStore.getState()
+    const current = collectionLayouts[groupId] ?? { cards: {} }
+    setCollectionLayouts({ [groupId]: { ...current, collapsed: collapsed ?? !current.collapsed } })
+  },
+  requestFitCollection: (id) => set((s) => ({ fitCollectionRequest: { id, nonce: (s.fitCollectionRequest?.nonce ?? 0) + 1 } })),
   placeNewCard: (id, pos) => set((s) => ({ pendingPlacements: { ...s.pendingPlacements, [id]: pos } })),
   setSelected: (selected) => set({ selected }),
   requestSelection: (selected, opts) =>
@@ -182,9 +255,23 @@ export const useUiStore = create<UiState>()((set) => ({
   setDraft: (draft) => set({ draft }),
   requestDeleteLinks: (ids) => set({ pendingDeleteLinkIds: ids }),
   setReconnectDraft: (reconnectDraft) => set({ reconnectDraft }),
-  setShowEdgeLabels: (showEdgeLabels) => set({ showEdgeLabels }),
-  setShowExternal: (showExternal) => set({ showExternal }),
-  setShowMinimap: (showMinimap) => set({ showMinimap }),
+  preferences: loadPreferences(),
+  setPreference: (key, value) =>
+    set((s) => {
+      const preferences = { ...s.preferences, [key]: value }
+      saveOverrides(preferences)
+      return { preferences }
+    }),
+  setPreferences: (preferences) => {
+    saveOverrides(preferences)
+    set({ preferences: { ...preferences } })
+  },
+  preferencesOpen: false,
+  setPreferencesOpen: (preferencesOpen) => set({ preferencesOpen }),
+  resetPreferences: () => {
+    saveOverrides(DEFAULTS)
+    set({ preferences: { ...DEFAULTS } })
+  },
   sidebarOpen: loadSidebarOpen(),
   toggleSidebar: () =>
     set((s) => {
@@ -208,7 +295,15 @@ export const useUiStore = create<UiState>()((set) => ({
   openAddCard: (request = {}) => set({ addCardRequest: request }),
   closeAddCard: () => set({ addCardRequest: null }),
   setEditCardId: (editCardId) => set({ editCardId }),
+  setEditCollectionId: (editCollectionId) => set({ editCollectionId }),
+  setDeleteCollectionId: (deleteCollectionId) => set({ deleteCollectionId }),
   setContextMenu: (contextMenu) => set({ contextMenu }),
   setDeleteCardId: (deleteCardId) => set({ deleteCardId }),
-  reset: () => set({ ...initial, sidebarOpen: loadSidebarOpen(), inspectorSections: loadSections() }),
+  setCommandBarOpen: (commandBarOpen) => set({ commandBarOpen }),
+  openNewCollection: (request = {}) => set({ newCollectionRequest: request }),
+  closeNewCollection: () => set({ newCollectionRequest: null }),
+  requestFocus: (ids) => set((s) => ({ focusRequest: { ...ids, nonce: (s.focusRequest?.nonce ?? 0) + 1 } })),
+  setCanvasSpotlight: (canvasSpotlight) => set({ canvasSpotlight }),
+  // Signing out clears session state but keeps this browser's preferences and remembered UI state.
+  reset: () => set({ ...initial, sidebarOpen: loadSidebarOpen(), inspectorSections: loadSections(), preferences: loadPreferences() }),
 }))

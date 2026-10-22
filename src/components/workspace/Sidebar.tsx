@@ -2,15 +2,13 @@ import { useMemo, useRef, useState } from 'react'
 import { isFiltering, type AnnotationFilter } from '../../graph/filters'
 import { describeError } from '../../services/atproto/errors'
 import { CONNECTION_TYPES, styleForType } from '../../services/sources/semble/connectionTypes'
-import { config } from '../../config'
 import { useUiStore, type SidebarTab } from '../../state/uiStore'
 import { Alert } from '../ui/Alert'
 import { Button, IconButton, Spinner } from '../ui/Button'
-import { BlueskyIcon } from '../ui/BlueskyIcon'
 import { Icon } from '../ui/Icon'
 import { Logo } from '../ui/Logo'
-import { NEW_CARD_SHORTCUT } from './NewCardDialog'
-import { NewCollectionDialog } from './NewCollectionDialog'
+import { Keys } from '../command/Keys'
+import { COMMAND_BAR_SHORTCUT, NEW_CARD_SHORTCUT } from './shortcuts'
 import { SidebarToggle } from './SidebarToggle'
 import { UserMenu } from './UserMenu'
 import { useWorkspace } from './WorkspaceContext'
@@ -26,7 +24,6 @@ function CollectionPicker() {
   const selected = useUiStore((s) => s.selectedGroupIds)
   const toggleGroup = useUiStore((s) => s.toggleGroup)
   const setSelectedGroupIds = useUiStore((s) => s.setSelectedGroupIds)
-  const [creating, setCreating] = useState(false)
 
   let body: React.ReactNode
   if (collections.isPending) body = <Spinner label="Loading collections…" />
@@ -91,7 +88,7 @@ function CollectionPicker() {
   return (
     <Panel>
       <div className="mb-2 flex items-center gap-1.5">
-        <Button size="sm" icon="plus" className="min-w-0 flex-1 !justify-start" onClick={() => setCreating(true)}>
+        <Button size="sm" icon="plus" className="min-w-0 flex-1 !justify-start" onClick={() => useUiStore.getState().openNewCollection()}>
           New collection
         </Button>
         <IconButton
@@ -106,7 +103,6 @@ function CollectionPicker() {
         />
       </div>
       {body}
-      <NewCollectionDialog open={creating} onClose={() => setCreating(false)} />
     </Panel>
   )
 }
@@ -322,43 +318,32 @@ function SidebarTabs() {
   )
 }
 
-/** Small header buttons linking out: feedback form and Assemblage on Bluesky. */
-function ExternalLinks() {
-  const linkClass =
-    'inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-line bg-surface px-1.5 text-[12px] font-medium text-ink hover:bg-surface-2'
-  return (
-    <div className="flex shrink-0 gap-1 border-t border-line px-3 py-2">
-      <a href={config.feedbackUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
-        <Icon name="feedback" size={14} />
-        Give feedback
-        <span className="sr-only"> (opens in a new tab)</span>
-      </a>
-      <a href={config.blueskyUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
-        <span className="text-[#1185fe]">
-          <BlueskyIcon size={14} />
-        </span>
-        Follow on Bluesky
-        <span className="sr-only"> (opens in a new tab)</span>
-      </a>
-    </div>
-  )
-}
-
-function NewCardButton() {
+/** New card, and the way into the command bar. */
+function SidebarActions() {
   const openAddCard = useUiStore((s) => s.openAddCard)
   return (
-    <div className="shrink-0 border-b border-line px-3 py-2.5">
+    <div className="shrink-0 space-y-2 border-b border-line px-3 py-2.5">
       <Button
         variant="primary"
         icon="plus"
         className="w-full"
         title={`New card (${NEW_CARD_SHORTCUT})`}
-        aria-keyshortcuts="Meta+K Control+K"
+        aria-keyshortcuts="N"
         onClick={() => openAddCard()}
       >
         New card
         <kbd className="ml-auto rounded bg-white/20 px-1.5 font-sans text-[11px] font-medium">{NEW_CARD_SHORTCUT}</kbd>
       </Button>
+      <button
+        type="button"
+        aria-keyshortcuts="Meta+K Control+K"
+        onClick={() => useUiStore.getState().setCommandBarOpen(true)}
+        className="flex h-8 w-full items-center gap-2 rounded-md border border-line bg-surface-2 px-2.5 text-[13px] text-ink-3 hover:border-line-strong hover:text-ink-2"
+      >
+        <Icon name="search" size={14} />
+        <span className="min-w-0 flex-1 truncate text-left">Search or run a command</span>
+        <Keys keys={COMMAND_BAR_SHORTCUT} />
+      </button>
     </div>
   )
 }
@@ -377,10 +362,12 @@ export function Sidebar() {
           <Logo />
         </div>
       </div>
-      <NewCardButton />
-      <SidebarTabs />
-      <ExternalLinks />
-      <UserMenu />
+      {/* Scales with Preferences → Text size; the header stays put so the toggle lines up. */}
+      <div className="ui-scale flex min-h-0 flex-1 flex-col">
+        <SidebarActions />
+        <SidebarTabs />
+        <UserMenu />
+      </div>
     </nav>
   )
 }

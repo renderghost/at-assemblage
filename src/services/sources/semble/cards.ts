@@ -114,6 +114,8 @@ export async function applyRecordWrites(
             return op.delete(network.cosmik.collectionLink, { rkey })
           case 'network.cosmik.connection':
             return op.delete(network.cosmik.connection, { rkey })
+          case 'network.cosmik.collection':
+            return op.delete(network.cosmik.collection, { rkey })
           default:
             throw new Error(`Unexpected record type in ${o.uri}`)
         }

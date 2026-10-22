@@ -4,7 +4,7 @@ import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 import type { GraphItem } from '../../graph/model'
 import { useCreateConnection } from '../../queries/semble'
-import { DEFAULT_CONNECTION_TYPE, typeInfo } from '../../services/sources/semble/connectionTypes'
+import { typeInfo } from '../../services/sources/semble/connectionTypes'
 import { isDuplicateLink } from '../../services/sources/semble/mapping'
 import { useUiStore, type LinkDraft } from '../../state/uiStore'
 import { Alert } from '../ui/Alert'
@@ -41,6 +41,9 @@ function EditorForm({ draft, source, target }: { draft: LinkDraft; source: Graph
   const setDraft = useUiStore((s) => s.setDraft)
   const create = useCreateConnection()
   const recommendation = useTypeRecommendation(source, target)
+  const { defaultConnectionType, recommendedType } = useUiStore((s) => s.preferences)
+  // Preferences → Recommended type: "badge" only marks it in the picker.
+  const preselect = recommendedType === 'preselect' ? recommendation : null
   const explicitType = typeInfo(draft.type)?.value
   const {
     register,
@@ -50,7 +53,7 @@ function EditorForm({ draft, source, target }: { draft: LinkDraft; source: Graph
     formState: { errors, dirtyFields },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { type: explicitType ?? recommendation?.type ?? DEFAULT_CONNECTION_TYPE, note: draft.note ?? '' },
+    defaultValues: { type: explicitType ?? preselect?.type ?? defaultConnectionType, note: draft.note ?? '' },
   })
   const type = useWatch({ control, name: 'type' })
   const note = useWatch({ control, name: 'note' })
@@ -59,8 +62,8 @@ function EditorForm({ draft, source, target }: { draft: LinkDraft; source: Graph
   // The recommendation may arrive after the form opens: preselect it unless the type was given
   // explicitly (e.g. from a suggestion) or the user has already chosen one.
   useEffect(() => {
-    if (recommendation && !explicitType && !dirtyFields.type) setValue('type', recommendation.type)
-  }, [recommendation, explicitType, dirtyFields.type, setValue])
+    if (preselect && !explicitType && !dirtyFields.type) setValue('type', preselect.type)
+  }, [preselect, explicitType, dirtyFields.type, setValue])
 
   const onSubmit = handleSubmit((values) => {
     // Close immediately: the optimistic edge shows progress on the canvas.

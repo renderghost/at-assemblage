@@ -1,9 +1,11 @@
 import { useAuthContext } from './auth/AuthContext'
+import { useApplyAppearance } from './preferences/appearance'
 import { SignInScreen } from './components/auth/SignInScreen'
 import { Spinner } from './components/ui/Button'
 import { Workspace } from './components/workspace/Workspace'
 
 export function App() {
+  useApplyAppearance()
   const { state } = useAuthContext()
   if (state.status === 'restoring') {
     return (

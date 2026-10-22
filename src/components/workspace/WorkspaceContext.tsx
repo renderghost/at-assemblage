@@ -42,7 +42,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useSelectionPersistence(did)
   const graph = useWorkspaceGraph()
   const filters = useUiStore((s) => s.filters)
-  const showExternal = useUiStore((s) => s.showExternal)
+  const showExternal = useUiStore((s) => s.preferences.showExternal)
 
   const visible = useMemo(
     () => applyFilters(graph.data, filters, graph.annotationsByItem, graph.groupNames, { showExternal }),

@@ -33,8 +33,8 @@ All variables are optional, and all of them point at public, unauthenticated end
 | --- | --- | --- |
 | `VITE_HANDLE_RESOLVER` | `https://public.api.bsky.app` | `com.atproto.identity.resolveHandle` (handle → DID). No credentials are sent. |
 | `VITE_PLC_DIRECTORY` | `https://plc.directory` | Resolving `did:plc` documents to find your PDS. |
-| `VITE_SEMBLE_API` | `https://api.semble.so` | Suggestions in the card inspector, from Semble's public API. The selected card's URL is sent. Set it to an empty string to turn suggestions off. |
-| `VITE_LINK_PREVIEW_SERVICE` | `https://cardyb.bsky.app/v1/extract` | Title and description preview when adding a card. Bluesky's link-card service receives the pasted URL. Set it to an empty string to turn previews off; you can still type a title. |
+| `VITE_SEMBLE_API` | `https://api.semble.so` | Suggestions in the card inspector, from Semble's public API. The selected card's URL is sent. Set it to an empty string to turn suggestions off for everyone; each user can also turn it off in **Preferences → Privacy & data**. |
+| `VITE_LINK_PREVIEW_SERVICE` | `https://cardyb.bsky.app/v1/extract` | Title and description preview when adding a card. Bluesky's link-card service receives the pasted URL. Set it to an empty string to turn previews off for everyone (each user can also turn them off in Preferences); you can still type a title. |
 
 ## How it works
 
@@ -44,7 +44,7 @@ These are what Semble actually stores. They differ in places from the original b
 
 | Concept | Record | Notes |
 | --- | --- | --- |
-| Collection | `network.cosmik.collection` | Name, description, access type. |
+| Collection | `network.cosmik.collection` | `name` (≤100), `description` (≤500), `accessType` (`CLOSED` = Personal, `OPEN` = anyone can add), `createdAt`, `updatedAt`. `collaborators` is kept untouched when editing; Semble's app doesn't use it. |
 | Card | `network.cosmik.card` | `URL` cards (URL plus metadata) or `NOTE` cards. A note with a `parentCard` is shown as a note on that card. |
 | Card ↔ collection | `network.cosmik.collectionLink` | **Membership is a separate record.** It is not a field on the card. |
 | Connection | `network.cosmik.connection` | `source`, `target` (URL **or** AT URI), optional `connectionType`, optional `note`. Semble's own UI writes card URLs, and so do we. |
@@ -81,7 +81,7 @@ Each type has an icon, a colour and a dash pattern, so colour is never the only 
 
 ### Adding cards and collections
 
-**Cards.** Click **New card** at the top of the sidebar, press `⌘K` / `Ctrl+K`, or right-click empty canvas and choose **New card** (the card is then placed where you clicked). The form follows Semble's: URL, optional note, and the collections to add the card to. The collections shown on the canvas are ticked by default. A preview prefills the title, which you can edit.
+**Cards.** Click **New card** at the top of the sidebar, press `N`, paste a link into the command bar, or right-click empty canvas and choose **New card** (the card is then placed where you clicked). The form follows Semble's: URL, optional note, and the collections to add the card to. The collections shown on the canvas are ticked by default. A preview prefills the title, which you can edit.
 
 Everything is written in **one `applyWrites` commit**, exactly as Semble would write it:
 
@@ -97,7 +97,117 @@ The new card is selected and zoomed to once it appears on the canvas. If none of
 
 **Collections.** Click **New collection** at the top of the sidebar's collection list. Enter a name (up to 100 characters), an optional description (up to 500), and a collaboration setting. The settings are Semble's: Personal (`CLOSED`, the default) or Open (`OPEN`). The new collection is ticked straight away.
 
-**Account menu.** The button at the bottom of the sidebar shows your Bluesky display name and avatar. Both are read from the `app.bsky.actor.profile` record on your own PDS; the avatar is served by the PDS's public `getBlob` endpoint. The menu holds your handle and DID (with a copy button), the two display settings, and Sign out.
+**Account menu.** The button at the bottom of the sidebar shows your Bluesky display name and avatar. Both are read from the `app.bsky.actor.profile` record on your own PDS; the avatar is served by the PDS's public `getBlob` endpoint. The menu holds links only:
+
+- **Your profile:** avatar, display name and handle, then **View on Bluesky** (`bsky.app/profile/{handle}`), **View on Semble** (`semble.so/profile/{handle}`) and **View on Margin** (`margin.at/profile/{did}`)
+- **Assemblage:** the same three links for @assemblage.mu.social, plus **Give feedback** (Assemblage's form on userinput.app)
+- **Preferences** (opens the Preferences dialog) and **Sign out**
+
+Every link opens in a new tab. Assemblage's handle and DID are in `src/config.ts`.
+
+### Collections on the canvas
+
+With **Collections: Containers** (the default; Preferences → Canvas), each shown collection is a box around its cards. With **Flat**, cards are laid out freely with collection badges, as before.
+
+- **Boxes.** A tinted box with a header showing the name, Personal/Open icon, card count and collapse chevron.
+  - Drag the header to move the box with its cards.
+  - Select the box to resize it from any edge or corner. It can't shrink past its cards.
+  - Drag a card past an edge and the box grows to keep wrapping it, in any direction. This uses React Flow's `expandParent`; the box also keeps clear of the header and its padding.
+  - **Fit to cards** (right-click, or the inspector) wraps the cards snugly with padding.
+- **Collapse and expand.** Use the chevron or double-click. A collapsed collection becomes one compact node.
+  - Connections to its hidden cards are **rolled up** into one edge per outside card and direction, labelled with the type or "*n* connections".
+  - Connections between two cards of the same collapsed collection are hidden.
+  - Selecting a hidden card or connection from the inspector expands the collection first.
+- **Cards in several collections.** A card sits in its **primary** collection: the first shown one it belongs to. Badges name its other shown collections; click one to open that collection.
+- **Where things are saved.** Everything is per browser, in `localStorage`, never on the PDS.
+  - Each collection's own layout (card positions relative to the box, size, collapsed), per account. This is independent of which other collections are shown.
+  - Where each box sits, plus any cards outside a box, per account and set of shown collections.
+  - The first time a collection becomes a box, it keeps the arrangement its cards had on the flat canvas, if any; otherwise ELK lays it out. Boxes are packed so they don't overlap.
+- **Right-click a collection:**
+  - **New card here**: placed where you clicked, with the collection pre-ticked. A card created from empty canvas outside its box goes inside the box instead.
+  - **Edit collection…**, **Fit to cards**, **Collapse/Expand**, **View on Semble**, **Delete collection…**
+- **Connections never start or end at a collection.** Semble's connection endpoints are URLs or cards (`UrlOrCardIdType` is `URL | CARD`), so collection-to-card lines are derived from membership, never stored.
+
+**Collection inspector.** Select a box (or a card's collection badge):
+
+| Section | Contents |
+| --- | --- |
+| **Details** | Name, description, access (Personal/Open), created and updated dates; **Edit**, **View on Semble**, **Collapse/Expand**, **Fit to cards** |
+| **Cards (n)** | **Yours**, from your `collectionLink`s (click to select). For Open collections, **Added by others**: cards other people added, which live in their repos and come from Semble's public `collection.getByAtUri`. **Add** puts one into your library, in this collection. |
+| **Connections (n)** | Connections between the collection's cards and cards outside it, grouped by type and showing direction |
+| **People (n)** | Contributors and follower count, from Semble's public `collection.getContributors` and `getByAtUri` |
+
+**Editing and deleting collections.**
+- **Edit** changes what Semble's own update supports: name, description, Personal/Open. It's updated in place with `swapRecord`, keeping `createdAt` and `collaborators` and setting `updatedAt`. Semble's indexer applies collection updates.
+- **Delete** removes the collection record and your `collectionLink`s to it in one commit. Cards stay in your library and other collections.
+
+### Preferences
+
+`src/preferences/preferences.ts` holds the **system defaults** for every preference, and is the one place to change them. Only a user's overrides are stored (`assemblage:preferences:v1`, per browser), each validated on load. So changing a default reaches everyone who hasn't changed that setting, and a bad stored value falls back to the default.
+
+Account menu → **Preferences** opens a native modal `<dialog>`: one scrolling page, centred, at most 560px wide and the window's height less 32px. Multiple-choice settings are vertical radio lists and on/off settings are checkboxes. Each shows its default: "(default)" after the default option, "(default: on/off)" after a checkbox.
+
+Changes are a draft until **Save changes**, which is disabled while nothing differs from what's saved. **Exit without saving**, the close button and Escape all drop the draft. **Reset settings to defaults**, at the bottom, resets the draft; Save applies it.
+
+| Section | Setting | Options (default first) | What it does |
+| --- | --- | --- | --- |
+| Appearance | Theme | Match system, Light, Dark | Sets `data-theme` on `<html>`; the dark tokens apply under the system setting unless Light is chosen, or always with Dark. The logo follows. |
+| | Text size | Normal, Large, Larger | CSS `zoom` (1, 1.143, 1.286) on `.ui-scale`: the sidebar below its header, inspector sections, dialogs, menus and notifications. The canvas has its own zoom. |
+| | Always reduce motion | off | Animated zooms take no time and CSS transitions and animations are cut. The system's reduce-motion setting is always respected too. |
+| Canvas | Collections on the canvas | Containers, Flat | See [Collections on the canvas](#collections-on-the-canvas). |
+| | Line style | Curved, Straight, Angled | Bezier, straight or rounded step paths for connections, roll-ups and the line drawn while connecting. |
+| | Always show connection labels | off | Otherwise a label shows on hover or selection. |
+| | Show connected cards outside these collections | on | The dashed outside cards. |
+| | Show minimap | on | Also toggled from the view controls. |
+| | Snap cards to the grid | off | 20px, matching the background dots. |
+| | Zoom to new cards | on | After adding a card, the canvas moves to it (never when you chose where it goes). |
+| Connections | Default connection type | Relates to, or any of Semble's types | What the New-connection form starts on when nothing is recommended. |
+| | Recommended type | Choose it for me, Only mark it as recommended, Don't recommend a type | See [Recommended connection type](#recommended-connection-type). Off also skips the Semble lookup. |
+| | Confirm before deleting connections | Always, Only when deleting several at once, Never | Skips the confirm dialog for one connection, or for any. Deleting cards and collections always asks. |
+| Privacy & data | Use Semble's public data | on | Suggestions, recommendations from others' connections, and a collection's People and others' cards. Off: no requests to Semble's API at all. Disabled when `VITE_SEMBLE_API` is empty. |
+| | Link previews | on | Bluesky's link-card service fills in a new card's title. Disabled when `VITE_LINK_PREVIEW_SERVICE` is empty. |
+| | Load site icons and images | on | Favicons, page thumbnails and Semble contributors' avatars, loaded from the sites they belong to. Your own avatar comes from your PDS and always shows. |
+
+Preferences survive sign-out. Sidebar and inspector open/closed state is remembered separately, as UI state.
+
+### Command bar
+
+`⌘K` / `Ctrl+K` (or **Search or run a command** under New card) opens a bar for doing almost anything from the keyboard. It's modelled on Raycast: results on the left, a preview of the highlighted one on the right, and the keys along the bottom.
+
+**With nothing typed** it shows, in order:
+- **Suggestions** for the selection: for one card, connect it, open its page, edit or delete it; for two cards, connect them either way; for a connection, change its type, reverse it, edit its note or delete it; for a collection, collapse, fit or hide it.
+- **Recent** things you chose, ranked by frecency (how often, fading with a one-week half-life; stored per browser).
+- Then the commands, by section: **Create**, **Canvas**, **Settings**, **Help & account**.
+
+**Type to search** your whole library, not just the canvas. Results are fuzzy-ranked: the start of a title beats the start of a word, which beats any substring, which beats letters in order (`rdgst` finds radioghost). Matched letters are highlighted.
+
+| Kind | Searched in | Enter |
+| --- | --- | --- |
+| Cards | title, site, URL, description, your Semble notes, your Margin notes | Shows it: adds every collection it's in (keeping what's shown), clears filters if they'd hide it, opens a collapsed box, then selects and zooms to it. A card in no collection opens its actions instead. |
+| Collections | name, description | Adds it to the canvas and zooms to it. |
+| Connections | their notes | Shows one end's collections if needed, then selects it. |
+| Commands | title and keywords | Runs it. |
+
+A matched note or description shows as an excerpt under the title. A pasted link (`https://…` or `www.…`) is offered first as **Add card**, with its title and image fetched for the preview (when link previews are on); if it's already in your library, that card is listed too. With no results, the bar offers **New collection “…”** and **Add a card**.
+
+**Live preview.** As you move through results, the canvas glides to each card, connection or collection that's on it, landing below the bar, and everything else fades back. `Esc` returns the canvas to where it was; choosing something keeps it.
+
+**Actions.** `⌘K` (or `→` at the end of the field) on a highlighted result lists everything you can do with it, with the preview kept:
+- **cards:** show or select, connect to…, connect the selected card to this, open page, view on Semble, copy URL, edit, delete
+- **collections:** show or zoom, hide, show only this one, collapse or expand, fit to cards, new card in it, edit, view on Semble, delete
+- **connections:** show, change type, reverse direction, edit note, delete
+
+**Connecting from the keyboard.** **Connect to…** asks for the target (any card in your library, searched the same way), then the type, then an optional note. Recommended type and default type work as in the connection editor (the recommended one is marked, and chosen for you if Preferences says so). Enter on the note saves. If neither card is on the canvas, the first one is shown.
+
+**With nothing selected,** **Connect cards…**, **Edit card…**, **Delete card…**, **Edit collection…** and **Delete collection…** ask which card or collection first.
+
+**Settings.** Every preference is a command that applies at once: search "dark", "angled", "minimap" or "privacy". Each shows its current value. **Open Preferences…** opens the dialog.
+
+**Keys.** `↑` `↓` (or `Ctrl+N` / `Ctrl+P`) move, `Page Up` / `Page Down` jump, `Enter` runs, `⌘K` or `→` opens actions, `⌫` in an empty field goes back, and `Esc` goes back and then closes. **Keyboard shortcuts** lists every shortcut in the app. The bar doesn't open over another dialog. It's an ARIA combobox and listbox (`aria-activedescendant`), announces the result count, returns focus on close, and follows Preferences → Text size and Reduce motion.
+
+**Shortcuts:** `⌘K` / `Ctrl+K` command bar, `N` new card (it used to be `⌘K`), `⌘B` / `Ctrl+B` sidebar, `1` fit view, `2` zoom to selection, `0` 100%, `+` / `−` zoom, `Delete` delete selected connections. Single-key shortcuts don't fire while you're typing in a text field.
+
+**Adding a command.** Commands come from providers in `src/commands/providers.ts`: functions from a `CommandContext` (the search index, what's on the canvas, the selection, preferences, and helpers to reveal, connect and edit) to a list of commands. A provider returns only the commands that make sense right now. A command has an id, title, section, icon, optional keywords, shortcut, description and current value, and a `run` that either does something (the bar closes) or returns `{ push: view }` to open a sub-view, as **Connect to…** does. Set `listed: true` to show it with an empty query; otherwise it's found by searching. Rows, sub-views and actions for cards, collections and connections are in `src/commands/entities.ts`.
 
 ### Suggestions from Semble
 
@@ -145,6 +255,8 @@ How the badge behaves in each form:
 | New connection | The recommended type is preselected, unless you arrived with an explicit type (for example from a suggestion row) or have already picked one. **Swap direction** recalculates the recommendation. |
 | Edit connection | The badge is shown, but your stored type is never changed for you. |
 
+**Preferences → Connections → Recommended type** changes this: **Only mark it as recommended** keeps the badge but never preselects, and **Don't recommend a type** turns recommendations off (and skips the Semble lookup behind them). Without a recommendation, a new connection starts on **Default connection type**.
+
 ### Editing connections
 
 | Action | How | What is written |
@@ -153,7 +265,7 @@ How the badge behaves in each form:
 | Change the type or reverse it | Inspector: type picker or **Reverse direction**, then **Save changes** | An atomic replace (see below) |
 | Move one end | Drag the end of an edge onto another card, then confirm | An atomic replace |
 | Bulk retype | Shift-select connections (or select cards, then **Select the connections between these cards**), pick a type, then confirm | Replaces, in `applyWrites` batches of at most 100 operations. Selected connections that already have that type, or that would duplicate another connection, are skipped. |
-| Delete | **Delete** button, or the Delete key, with one or more connections selected. You confirm first. | `deleteRecord` for one connection, `applyWrites` for several |
+| Delete | **Delete** button, or the Delete key, with one or more connections selected. You confirm first, unless Preferences → Confirm before deleting connections says otherwise. | `deleteRecord` for one connection, `applyWrites` for several |
 
 **Why type and direction changes are replacements.** Semble's indexer only applies **note** changes from record updates. See `ProcessConnectionFirehoseEventUseCase` in Semble, where source, target and type changes are ignored. If we updated the type in place, your PDS and Semble would disagree.
 
@@ -181,7 +293,7 @@ lexicons.json         lexicon manifest with CIDs (committed)
 - **Typed records only.** Every read goes through `client.list`/`listAll`, which validates against the generated schemas. Records that fail validation are counted and reported, never used. Every write is built with `$build` and checked with `$parse` before it is sent.
 - **Edge routing.** Every card has a handle on each side. Each edge attaches to the facing sides of its two cards: whichever axis has the larger clear gap, so side-by-side cards connect left↔right and stacked cards top↔bottom (`src/graph/edgeSides.ts`). This is recalculated from live positions, so edges follow a card while you drag it. Because edges use real handles, React Flow's drag-to-move anchors stay at the true ends.
 - **Layout.** ELK places cards that have no saved position yet; after that, cards stay where you put them. Manual positions are saved in `localStorage`, keyed by DID and the set of selected collections. They are never written to the PDS. A "Tidy layout" command was removed because its results weren't good enough; see [#7](https://github.com/renderghost/at-assemblage/issues/7).
-- **Left sidebar.** **Collections** and **Filters** are two tabs, so each gets the full height. Two links stay pinned above the account button: **Give feedback** (Assemblage's feedback form on userinput.app) and **Follow on Bluesky** (@assemblage.mu.social). In the tabs, a dot on the Filters tab shows when filters are active. The button left of the logo hides the sidebar (also `⌘B` / `Ctrl+B`, from anywhere except an open dialog). While it's hidden, the same button floats at the canvas's top left in exactly the same spot, matching the view controls at the bottom left. This browser remembers whether the sidebar is shown.
+- **Left sidebar.** **Collections** and **Filters** are two tabs, so each gets the full height. The feedback and Bluesky links are in the account menu. In the tabs, a dot on the Filters tab shows when filters are active. The button left of the logo hides the sidebar (also `⌘B` / `Ctrl+B`, from anywhere except an open dialog). While it's hidden, the same button floats at the canvas's top left in exactly the same spot, matching the view controls at the bottom left. This browser remembers whether the sidebar is shown.
 - **Inspector.** A stack of cards floating over the canvas's right edge, 320px wide and 16px in from the top and right. It slides in when something is selected and out when nothing is. Each section collapses on its own and several can be open at once; Details and Notes are open by default, and this browser remembers your choices from card to card and across visits. The stack scrolls when it's taller than the canvas, and the gaps between cards pass clicks through to the canvas. Fit view, zoom to selection, the minimap (top right) and notifications all keep clear of it while it's showing. For a selected card, the sections are:
 
   | Section | Contents |
@@ -273,9 +385,14 @@ npm test
 | `src/services/sources/semble/create.test.ts` | New card, note and link records shaped like Semble's; URL validation; reusing an existing card (links only for missing collections, one note per link); a single commit whose locally computed CIDs match the PDS's; collection records and lexicon limits |
 | `src/services/sources/semble/notes.test.ts` | Adding a Semble note linked to a card, editing it in place, refusing an edit when the note changed elsewhere |
 | `src/services/sources/semble/cards.test.ts` | Changing a card's collections in one commit; deleting a card with its note, links and connections (matched by URL or AT URI), leaving unrelated records |
+| `src/graph/containers.test.ts` | Primary collection; wrapping (grows only, moves origin left/up with a matching shift); fit to cards; placing new cards; packing boxes without overlap or one long strip; roll-ups |
+| `src/preferences/preferences.test.ts` | Defaults; only overrides stored; invalid or unknown stored values (including unknown connection types) fall back; comparing preference sets for Save |
+| `src/services/sources/semble/collections.test.ts` | Collection edit in place (fields kept, `updatedAt` set), conflict refusal, lexicon limits; delete removes the collection and its links in one commit, keeping cards |
 | `src/services/linkPreview.test.ts` | Preview mapping; failure and disabled cases |
 | `src/services/sources/semble/appview.test.ts` | Semble API calls (plain GET, no credentials), lenient response validation, error mapping |
 | `src/services/sources/semble/recommendType.test.ts` | Same-resource signals (DOI, ISBN, archive copies, cosmetic URL differences) and staying silent for different pages. Consensus thresholds (2+ people, majority, same direction, one vote per person, own connections and unknown types excluded). Same-resource takes priority. |
+| `src/commands/match.test.ts`, `src/commands/searchIndex.test.ts` | Command bar ranking (prefix, word start, substring, letters in order; accents ignored), all-words matching with highlights and excerpts; indexing every library card with all its collections, Semble and Margin notes and connection count; connections by note |
+| `src/commands/recents.test.ts`, `src/commands/root.test.ts` | Frecency ranking and bad stored data; providers offering only settings you aren't on and suggestions for one or two selected cards; the first page's sections, recents, ranking commands against cards, pasted links, no-results fallbacks, loading and error rows |
 | `src/services/sources/semble/suggestions.test.ts` | Direction from either end (including `www.` variants), skipping your own connections, merging curators and ranking, flagging pages in your library and connections already made, de-duplicating similar pages |
 
 The integration tests use `src/test/fakePds.ts`. This is an in-memory PDS, PLC directory and handle resolver. The real `@atproto/lex` client and `PasswordSession` run against it over `fetch`, including token expiry, revocation, cursors and injected failures. Like a real PDS, it hashes each created record as received to produce its CID.
@@ -347,15 +464,59 @@ Scale, measured in headless Chromium with software rendering:
 
 Panning stays usable at 300 cards: about 28 fps headless, which should be higher on GPU-backed browsers.
 
+A run in Chrome covered collections on the canvas:
+- dragging a card past a box's left edge (the box grew and the card stayed inside)
+- moving a box by its header
+- resizing, then **Fit to cards** shrinking it back
+- the collection inspector's four sections, with Semble data mocked
+- a card's badge opening its other collection
+- others' cards in an Open collection
+- collapsing by double-click (4 labelled roll-ups, hidden cards), surviving a reload, and expanding by chevron
+- the collection menu and **New card here** (the card lands inside the box)
+- editing in place (description, `createdAt` kept; `updatedAt` set)
+- switching to Flat and resetting to defaults
+- deleting a collection (its links removed, cards kept)
+- no console errors
+
+A run in Chrome covered the account menu and Preferences, with Semble's API mocked:
+- the menu's seven links and their URLs, then Preferences and Sign out
+- the dialog: four sections, "(default)" markers, Save disabled until something changes and again when changed back
+- Exit without saving and Escape dropping changes; reopening from the saved values
+- saving Dark, Larger, Straight, snap, Supports, Never, and Semble data and site images off: only those overrides stored, `<html>` attributes set, sidebar zoom 1.286, straight edge paths, no favicons
+- with Semble data off, selecting a card made no requests to Semble and showed no Suggestions
+- with Never, the Delete key removed a connection without a dialog
+- Reset settings to defaults, then Save: nothing stored
+- at 800×520 the dialog fits, its body scrolls and the footer stays in view
+- no console errors
+
+Two runs in Chrome covered the command bar:
+- `⌘K` opening it; `N` opening New card (also from a focused checkbox)
+- searching "radio": the card highlighted, spotlighted and glided to; `Esc` closing and restoring the view
+- searching an outside card and pressing Enter: its collection added, the card selected
+- a card's actions with `⌘K`, then **Connect to…** → a target → **Supports** → a note → Enter: the record on the PDS had the type and note
+- "dark" → **Theme: Dark** applied
+- a pasted new URL offering **Add card** first; a known URL listing its card once
+- no results offering **New collection “…”** and **Add a card**
+- a collection found by name and shown; a connection found by its note and selected
+- Suggestions for a selected connection, and **Reverse direction** swapping the record's ends
+- two selected cards offering both directions; recents after use; **Keyboard shortcuts**; `⌫` back; `Esc` close
+- not opening over the New card dialog
+- dark theme with Larger text; at 600px wide the preview pane hides
+- no console errors
+
 ## Known limitations
 
+- **Collections are containers or flat; the hub-node presentation is still to come** ([#16](https://github.com/renderghost/at-assemblage/issues/16)).
+- **The command bar doesn't yet add notes, retype several connections at once, or arrange cards** ([#17](https://github.com/renderghost/at-assemblage/issues/17)); use the inspector for those. Recents and the live preview's spotlight are per browser.
+- **Dragging a card into another collection's box doesn't change its collections.** Positions only; use Edit card.
+- **Box layouts are per browser**, like card positions.
 - **Own records only.** Cards that other people added to your open collections live in their repos and are not loaded. The same applies to other people's connections and Margin notes. Reading those needs an AppView.
 - **Margin notes are basic.** You can read your own notes on a card's URL and create plain `commenting` notes. Editing, highlights, selectors and bookmarks are not supported.
 - **Changing a connection's type or ends gives it a new AT URI.** This is the price of staying in sync with Semble (see [Editing connections](#editing-connections)). Anything that linked to the old URI will not follow it.
 - **Handle resolution uses a public resolver.** By default this is `public.api.bsky.app`. Enter a DID to skip it entirely.
 - **Positions are per browser.** Layout is not synced across devices.
-- **Favicons** are loaded directly from each card's domain, with no referrer.
+- **Favicons** are loaded directly from each card's domain, with no referrer. Turn them off in Preferences → Load site icons and images.
 - **The App Password format check** assumes the standard `xxxx-xxxx-xxxx-xxxx` format used by the reference PDS.
 - **Cards and collections can be created, but not yet edited or deleted.** The same applies to notes and to removing a card from a collection. Use Semble for those for now.
-- **Link previews use Bluesky's link-card service.** Turn them off with `VITE_LINK_PREVIEW_SERVICE=`. Without a preview, the card's title is whatever you type, or a cleaned-up URL; Semble fetches its own metadata either way.
+- **Link previews use Bluesky's link-card service.** Turn them off in Preferences, or for everyone with `VITE_LINK_PREVIEW_SERVICE=`. Without a preview, the card's title is whatever you type, or a cleaned-up URL; Semble fetches its own metadata either way.
 - Out of scope for the beta: OAuth, public or other users' collections, network search, collaboration, offline sync, import/export, and AI features.

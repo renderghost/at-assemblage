@@ -8,20 +8,21 @@ import { Alert } from '../ui/Alert'
 import { Button, Spinner } from '../ui/Button'
 import { Dialog } from '../ui/Dialog'
 import { useUiStore, type AddCardRequest } from '../../state/uiStore'
+import { isTyping, overlayOpen } from './shortcuts'
 import { useWorkspace } from './WorkspaceContext'
 
 const inputClass =
   'w-full rounded-md border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none'
 
 /** Accepts "example.com/x" as well as full URLs. */
-function toUrl(raw: string): string | null {
+export function toUrl(raw: string): string | null {
   const value = raw.trim()
   if (!value) return null
   const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`
   return isHttpUrl(candidate) && new URL(candidate).hostname.includes('.') ? candidate : null
 }
 
-function useLinkPreview(url: string | null) {
+export function useLinkPreview(url: string | null) {
   const [state, setState] = useState<{ url: string | null; loading: boolean; preview: LinkPreview | null }>({
     url: null,
     loading: false,
@@ -56,7 +57,8 @@ function NewCardForm({ request, onDone }: { request: AddCardRequest; onDone: () 
   const url = toUrl(rawUrl)
   // A prefilled request (e.g. from a Semble suggestion) already carries metadata.
   const prefilled = !!(request.url && (request.title || request.description)) && url === toUrl(request.url)
-  const { loading, preview } = useLinkPreview(prefilled ? null : url)
+  const { linkPreviews, siteImages } = useUiStore((s) => s.preferences)
+  const { loading, preview } = useLinkPreview(prefilled || !linkPreviews ? null : url)
   const effectiveTitle = title ?? preview?.title ?? ''
   const description = prefilled ? request.description : preview?.description
   const imageUrl = prefilled ? request.imageUrl : preview?.imageUrl
@@ -141,7 +143,7 @@ function NewCardForm({ request, onDone }: { request: AddCardRequest; onDone: () 
 
       {url ? (
         <div className="flex gap-3 rounded-md border border-line bg-surface-2 p-3" aria-live="polite">
-          {imageUrl && isHttpUrl(imageUrl) ? (
+          {siteImages && imageUrl && isHttpUrl(imageUrl) ? (
             <img src={imageUrl} alt="" referrerPolicy="no-referrer" className="h-16 w-24 shrink-0 rounded object-cover" />
           ) : null}
           <div className="min-w-0 flex-1">
@@ -254,15 +256,14 @@ function NewCardForm({ request, onDone }: { request: AddCardRequest; onDone: () 
   )
 }
 
-const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
-export const NEW_CARD_SHORTCUT = isMac ? '⌘K' : 'Ctrl+K'
 
 /** ⌘K / Ctrl+K opens the add-card form from anywhere, including text fields, unless a dialog is open. */
+/** N opens the add-card form, unless you're typing or something else is open. */
 export function useNewCardShortcut() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== 'k' || !(isMac ? e.metaKey : e.ctrlKey) || e.altKey || e.shiftKey) return
-      if (document.querySelector('dialog[open]')) return
+      if (e.key.toLowerCase() !== 'n' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat) return
+      if (isTyping(e.target) || overlayOpen()) return
       e.preventDefault()
       useUiStore.getState().openAddCard()
     }

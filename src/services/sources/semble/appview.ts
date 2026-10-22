@@ -102,3 +102,47 @@ export async function fetchConnectionsForUrl(
   const raw = await get('network.cosmik.connection.getForUrl', { url, direction: 'both', limit: opts.limit ?? 30 }, opts)
   return parseList(raw, 'connections', ConnectionView)
 }
+
+const CollectionCard = z
+  .object({
+    url: z.string(),
+    cardContent: UrlMetadata.optional(),
+    author: User,
+    urlLibraryCount: z.number().optional(),
+    note: z.object({ text: z.string() }).passthrough().optional(),
+  })
+  .passthrough()
+
+const CollectionPage = z
+  .object({
+    id: z.string(),
+    name: z.string().optional(),
+    cardCount: z.number().optional(),
+    followerCount: z.number().optional(),
+    author: User.optional(),
+  })
+  .passthrough()
+
+const Contributor = User.extend({ contributionCount: z.number().optional() })
+
+export type SembleCollectionCard = z.infer<typeof CollectionCard>
+export type SembleContributor = z.infer<typeof Contributor>
+export type SembleCollectionPage = z.infer<typeof CollectionPage> & { cards: SembleCollectionCard[] }
+
+/**
+ * `network.cosmik.collection.getByAtUri`: Semble's view of a collection,
+ * including cards other people added to an Open collection (which live in
+ * their repos, not ours), its card and follower counts, and Semble's id.
+ */
+export async function fetchCollectionPage(handle: string, recordKey: string, opts: Options & { limit?: number } = {}): Promise<SembleCollectionPage> {
+  const raw = await get('network.cosmik.collection.getByAtUri', { handle, recordKey, limit: opts.limit ?? 50 }, opts)
+  const parsed = CollectionPage.safeParse(raw)
+  if (!parsed.success) throw new SembleApiError('Semble returned an unexpected response.')
+  return { ...parsed.data, cards: parseList(raw, 'urlCards', CollectionCard) }
+}
+
+/** `network.cosmik.collection.getContributors`: people who added cards, with how many. */
+export async function fetchCollectionContributors(collectionId: string, opts: Options & { limit?: number } = {}): Promise<SembleContributor[]> {
+  const raw = await get('network.cosmik.collection.getContributors', { collectionId, limit: opts.limit ?? 50 }, opts)
+  return parseList(raw, 'users', Contributor)
+}

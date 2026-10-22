@@ -14,34 +14,32 @@ import {
   type NodeSelectionChange,
 } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useAuth } from '../../auth/AuthContext'
+import { rollupLinks } from '../../graph/containers'
 import { chooseSides, sourceHandleId, targetHandleId } from '../../graph/edgeSides'
+import { NODE_HEIGHT, NODE_WIDTH } from '../../graph/layout'
 import { FOCUS_PADDING, INSPECTOR_RESERVED, fitPadding } from '../../graph/viewport'
-import { layoutGraph, NODE_HEIGHT, NODE_WIDTH, type Positions } from '../../graph/layout'
-import { layoutStorageKey, loadPositions, savePositions } from '../../graph/positions'
+import { motion } from '../../preferences/appearance'
 import { styleForType } from '../../services/sources/semble/connectionTypes'
-import { useUiStore } from '../../state/uiStore'
-import { CardNode, type CardNodeType } from './CardNode'
+import { useUiStore, type SelectionIds } from '../../state/uiStore'
+import { CardNode } from './CardNode'
+import type { AppNode } from './canvasNodes'
+import { CollectionNode } from './CollectionNode'
 import { ConnectionEdge, type ConnectionEdgeType } from './ConnectionEdge'
+import { CONNECTION_LINE_TYPE } from './edgePath'
+import { RollupEdge, type RollupEdgeType } from './RollupEdge'
+import { useContainerLayout } from './useContainerLayout'
+import { useFlatLayout } from './useFlatLayout'
 import { useInspectorShown, useMinimapFits } from './useMinimapFits'
 import { ViewControls } from './ViewControls'
 import { useWorkspace } from './WorkspaceContext'
 
-const nodeTypes = { card: CardNode }
-const edgeTypes = { connection: ConnectionEdge }
+const nodeTypes = { card: CardNode, collection: CollectionNode }
+const edgeTypes = { connection: ConnectionEdge, rollup: RollupEdge }
 const DRAFT_EDGE_ID = '__draft__'
+/** Matches the background dots. */
+const SNAP_GRID: [number, number] = [20, 20]
 
-/** Places new nodes below everything already positioned so manual layouts are never disturbed. */
-function offsetBelow(existing: Positions, fresh: Positions): Positions {
-  const ys = Object.values(existing).map((p) => p.y)
-  const xs = Object.values(existing).map((p) => p.x)
-  if (ys.length === 0) return fresh
-  const top = Math.max(...ys) + NODE_HEIGHT + 80
-  const left = Math.min(...xs)
-  const out: Positions = {}
-  for (const [id, p] of Object.entries(fresh)) out[id] = { x: p.x + left, y: p.y + top }
-  return out
-}
+type AppEdge = ConnectionEdgeType | RollupEdgeType
 
 /**
  * Drops selected ids that were on the canvas and have now gone (deleted or filtered out). Ids
@@ -53,93 +51,68 @@ function pruneSelection(kind: 'nodes' | 'edges', before: Set<string>, now: Set<s
   if (kept.length !== selected[kind].length) setSelected({ ...selected, [kind]: kept })
 }
 
-export function GraphCanvas() {
-  const { did } = useAuth()
-  const { data, visible, activeGroupIds, groupNames, annotationsByItem, itemsById } = useWorkspace()
-  const { fitView, getNode, screenToFlowPosition } = useReactFlow<CardNodeType, ConnectionEdgeType>()
+/** Keeps the command bar's previewed cards and connections at full strength; the rest dim (index.css). */
+function spotlightCss({ nodes, edges }: SelectionIds): string {
+  const sel = [
+    ...nodes.map((id) => `.react-flow__node[data-id="${CSS.escape(id)}"]`),
+    ...edges.map((id) => `.react-flow__edge[data-id="${CSS.escape(id)}"]`),
+  ]
+  return sel.length ? `.spotlighting :is(${sel.join(', ')}) { opacity: 1; }` : ''
+}
 
-  const layoutKey = useUiStore((s) => s.layoutKey)
-  const positions = useUiStore((s) => s.positions)
+export function GraphCanvas() {
+  const { data, visible, itemsById, activeGroupIds } = useWorkspace()
+  const { fitView, screenToFlowPosition } = useReactFlow<AppNode, AppEdge>()
+
   const draft = useUiStore((s) => s.draft)
-  const showEdgeLabels = useUiStore((s) => s.showEdgeLabels)
-  // The minimap and view controls both sit along the bottom; on a narrow canvas only the controls fit.
+  const showEdgeLabels = useUiStore((s) => s.preferences.showEdgeLabels)
+  const presentation = useUiStore((s) => s.preferences.collectionPresentation)
+  const lineStyle = useUiStore((s) => s.preferences.lineStyle)
+  const snapToGrid = useUiStore((s) => s.preferences.snapToGrid)
+  // The minimap sits top right, left of the inspector while it shows; it hides on a narrow canvas.
   const minimapFits = useMinimapFits()
   const inspectorShown = useInspectorShown()
-  const showMinimap = useUiStore((s) => s.showMinimap) && minimapFits
+  const showMinimap = useUiStore((s) => s.preferences.showMinimap) && minimapFits
   const selectionRequest = useUiStore((s) => s.selectionRequest)
+  const focusRequest = useUiStore((s) => s.focusRequest)
+  const spotlight = useUiStore((s) => s.canvasSpotlight)
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null)
 
-  const storageKey = layoutStorageKey(did, activeGroupIds)
+  // Two presentations share everything but node layout: flat cards, or collections as containers.
+  const containersOn = presentation === 'containers'
+  const flat = useFlatLayout(!containersOn)
+  const containers = useContainerLayout(containersOn)
+  const derivedNodes: AppNode[] = containersOn ? containers.nodes : flat.nodes
 
-  // 1. Load saved positions for this DID + collection set.
+  // A zoom to cards or connections that may not be on the canvas yet (the command bar adds their
+  // collections first): retried as nodes arrive and are measured, for a few seconds.
+  const pendingFocus = useRef<(SelectionIds & { until: number }) | null>(null)
+  const nodesRef = useRef<AppNode[]>([])
+
+  // Fit the view whenever content first appears for a set of collections (load, reload, ticking
+  // collections, switching presentation), so nothing starts off screen.
+  const fittedFor = useRef<string | null>(null)
+  const scopeKey = `${presentation}:${[...activeGroupIds].sort().join('|')}`
+  const hasNodes = derivedNodes.length > 0
   useEffect(() => {
-    useUiStore.getState().loadLayout(storageKey, loadPositions(storageKey))
-  }, [storageKey])
+    if (!hasNodes || fittedFor.current === scopeKey) return
+    fittedFor.current = scopeKey
+    const { selected } = useUiStore.getState()
+    const padding = fitPadding(selected.nodes.length + selected.edges.length > 0)
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        // A requested zoom (e.g. to a card just revealed) wins over fitting everything.
+        if (!pendingFocus.current) fitView({ padding, duration: motion(0) })
+      }),
+    )
+  }, [hasNodes, scopeKey, fitView])
 
-  // 2. Lay out any visible items that have no position yet (first load, or new cards).
-  const missing = useMemo(
-    () => (layoutKey === storageKey ? data.items.filter((i) => !positions[i.id]) : []),
-    [layoutKey, storageKey, data.items, positions],
-  )
-  useEffect(() => {
-    if (missing.length === 0) return
-    // Cards placed explicitly (e.g. created from the context menu) skip auto-layout.
-    const { pendingPlacements } = useUiStore.getState()
-    const placed = Object.fromEntries(missing.flatMap((i) => (pendingPlacements[i.id] ? [[i.id, pendingPlacements[i.id]!]] : [])))
-    if (Object.keys(placed).length) {
-      const { positions: current, mergePositions } = useUiStore.getState()
-      mergePositions(placed)
-      savePositions(storageKey, { ...current, ...placed })
-      useUiStore.setState((s) => ({
-        pendingPlacements: Object.fromEntries(Object.entries(s.pendingPlacements).filter(([id]) => !placed[id])),
-      }))
-      return
-    }
-    let cancelled = false
-    const ids = new Set(missing.map((i) => i.id))
-    const links = data.links.filter((l) => ids.has(l.sourceId) && ids.has(l.targetId))
-    layoutGraph(missing, links).then((fresh) => {
-      if (cancelled) return
-      const { positions: current, mergePositions } = useUiStore.getState()
-      const placed = offsetBelow(current, fresh)
-      mergePositions(placed)
-      savePositions(storageKey, { ...current, ...placed })
-      // A just-added card is requested for selection before it has a position: focus it now.
-      const requested = useUiStore.getState().selectionRequest?.nodes.filter((id) => placed[id]) ?? []
-      if (requested.length) {
-        requestAnimationFrame(() =>
-          fitView({ nodes: requested.map((id) => ({ id })), padding: FOCUS_PADDING, duration: 400, maxZoom: 1.1 }),
-        )
-      } else if (Object.keys(current).length === 0) {
-        requestAnimationFrame(() => fitView({ padding: fitPadding(false), duration: 300 }))
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [missing, data.links, storageKey, fitView])
-
-  const derivedNodes: CardNodeType[] = useMemo(() => {
-    const multi = activeGroupIds.length > 1
-    return data.items
-      .filter((i) => visible.itemIds.has(i.id) && positions[i.id])
-      .map((item) => ({
-        id: item.id,
-        type: 'card' as const,
-        position: positions[item.id]!,
-        ariaLabel: `Card: ${item.title}`,
-        data: {
-          item,
-          annotationCount: annotationsByItem.get(item.id)?.length ?? 0,
-          groupBadges: multi ? item.groupIds.map((g) => groupNames.get(g) ?? 'Collection') : [],
-        },
-      }))
-  }, [data.items, visible.itemIds, positions, annotationsByItem, groupNames, activeGroupIds.length])
-
-  const derivedEdges: ConnectionEdgeType[] = useMemo(() => {
-    const edges: ConnectionEdgeType[] = data.links
-      .filter((l) => visible.linkIds.has(l.id))
-      .map((link) => {
+  const derivedEdges: AppEdge[] = useMemo(() => {
+    // Connections to cards hidden in a collapsed collection are redrawn from the collection.
+    const shown = data.links.filter((l) => visible.linkIds.has(l.id))
+    const { links, rollups } = containersOn ? rollupLinks(shown, containers.hiddenIn) : { links: shown, rollups: [] }
+    const edges: AppEdge[] = links
+      .map((link): ConnectionEdgeType => {
         const style = styleForType(link.type)
         const colour = link.pending ? 'var(--color-accent)' : style.colour
         return {
@@ -153,6 +126,20 @@ export function GraphCanvas() {
           data: { link, style, pending: link.pending, showLabel: showEdgeLabels, hovered: hoveredEdge === link.id },
         }
       })
+    for (const r of rollups) {
+      const single = r.types.length === 1 ? styleForType(r.types[0] || undefined) : null
+      edges.push({
+        id: r.id,
+        source: r.sourceId,
+        target: r.targetId,
+        type: 'rollup',
+        selectable: false,
+        focusable: false,
+        reconnectable: false,
+        markerEnd: { type: MarkerType.ArrowClosed, color: single?.colour ?? 'var(--color-ink-3)', width: 18, height: 18 },
+        data: { count: r.linkIds.length, types: r.types },
+      })
+    }
     if (draft && visible.itemIds.has(draft.sourceId) && visible.itemIds.has(draft.targetId)) {
       edges.push({
         id: DRAFT_EDGE_ID,
@@ -166,12 +153,12 @@ export function GraphCanvas() {
       })
     }
     return edges
-  }, [data.links, visible, draft, showEdgeLabels, hoveredEdge, itemsById])
+  }, [data.links, visible, draft, showEdgeLabels, hoveredEdge, itemsById, containersOn, containers.hiddenIn])
 
   // React Flow owns transient drag state; selection lives in the store so it survives edges being
   // swapped (an edited connection gets a new URI) without React Flow reporting an empty selection.
-  const [nodes, setNodes, onNodesChange] = useNodesState<CardNodeType>([])
-  const [edges, setEdges, onEdgesChange] = useEdgesState<ConnectionEdgeType>([])
+  const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<AppEdge>([])
   const prevIds = useRef({ nodes: new Set<string>(), edges: new Set<string>() })
   useEffect(() => {
     const ids = new Set(derivedNodes.map((n) => n.id))
@@ -191,11 +178,21 @@ export function GraphCanvas() {
   // Attach each edge to the facing sides of its two cards, from live positions so edges follow a
   // card while it is being dragged. React Flow's own reconnect anchors then sit at the right ends.
   const displayEdges = useMemo(() => {
+    // Cards inside a container have positions relative to it.
+    const byId = new Map(nodes.map((n) => [n.id, n]))
     const rects = new Map(
-      nodes.map((n) => [
-        n.id,
-        { x: n.position.x, y: n.position.y, width: n.measured?.width ?? NODE_WIDTH, height: n.measured?.height ?? NODE_HEIGHT },
-      ]),
+      nodes.map((n) => {
+        const parent = n.parentId ? byId.get(n.parentId) : undefined
+        return [
+          n.id,
+          {
+            x: n.position.x + (parent?.position.x ?? 0),
+            y: n.position.y + (parent?.position.y ?? 0),
+            width: n.measured?.width ?? n.width ?? NODE_WIDTH,
+            height: n.measured?.height ?? n.height ?? NODE_HEIGHT,
+          },
+        ]
+      }),
     )
     return edges.map((e) => {
       const s = rects.get(e.source)
@@ -208,6 +205,40 @@ export function GraphCanvas() {
     })
   }, [edges, nodes])
 
+  const linksRef = useRef(data.links)
+  useEffect(() => {
+    linksRef.current = data.links
+  }, [data.links])
+  const tryFocus = useCallback(() => {
+    const want = pendingFocus.current
+    if (!want) return
+    if (Date.now() > want.until) {
+      pendingFocus.current = null
+      return
+    }
+    const ids = new Set(want.nodes)
+    for (const id of want.edges) {
+      const link = linksRef.current.find((l) => l.id === id)
+      if (!link) return
+      ids.add(link.sourceId)
+      ids.add(link.targetId)
+    }
+    const byId = new Map(nodesRef.current.map((n) => [n.id, n]))
+    if (ids.size === 0 || ![...ids].every((id) => byId.get(id)?.measured?.width)) return
+    pendingFocus.current = null
+    requestAnimationFrame(() =>
+      fitView({ nodes: [...ids].map((id) => ({ id })), padding: FOCUS_PADDING, duration: motion(300), maxZoom: 1.2 }),
+    )
+  }, [fitView])
+  const focusOn = useCallback(
+    (ids: SelectionIds) => {
+      if (ids.nodes.length + ids.edges.length === 0) return
+      pendingFocus.current = { ...ids, until: Date.now() + 4000 }
+      tryFocus()
+    },
+    [tryFocus],
+  )
+
   // Programmatic selection from the inspector or search.
   useEffect(() => {
     if (!selectionRequest) return
@@ -216,15 +247,16 @@ export function GraphCanvas() {
     setNodes((ns) => ns.map((n) => ({ ...n, selected: nodeIds.has(n.id) })))
     setEdges((es) => es.map((e) => ({ ...e, selected: edgeIds.has(e.id) })))
     useUiStore.getState().setSelected({ nodes: [...nodeIds], edges: [...edgeIds] })
-    const focus = [...nodeIds]
-    for (const id of edgeIds) {
-      const link = data.links.find((l) => l.id === id)
-      if (link) focus.push(link.sourceId, link.targetId)
-    }
-    if (selectionRequest.focus && focus.length) fitView({ nodes: focus.map((id) => ({ id })), padding: FOCUS_PADDING, duration: 300, maxZoom: 1.2 })
+    if (selectionRequest.focus) focusOn({ nodes: selectionRequest.nodes, edges: selectionRequest.edges })
     // Only when a new request arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionRequest?.nonce])
+
+  useEffect(() => {
+    if (focusRequest) focusOn({ nodes: focusRequest.nodes, edges: focusRequest.edges })
+    // Only when a new request arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRequest?.nonce])
 
   // Only user-driven select/deselect changes update the store. React Flow's onSelectionChange would
   // also fire when we swap an edge's id, briefly reporting an empty selection.
@@ -241,7 +273,7 @@ export function GraphCanvas() {
   }, [])
 
   const handleEdgesChange = useCallback(
-    (changes: EdgeChange<ConnectionEdgeType>[]) => {
+    (changes: EdgeChange<AppEdge>[]) => {
       onEdgesChange(changes)
       applySelectChanges('edges', changes)
     },
@@ -254,31 +286,32 @@ export function GraphCanvas() {
   }, [])
 
   // Dragging an edge end onto another card proposes a move; nothing is written until confirmed.
-  const onReconnect = useCallback((oldEdge: ConnectionEdgeType, conn: Connection) => {
+  const onReconnect = useCallback((oldEdge: AppEdge, conn: Connection) => {
     if (!conn.source || !conn.target || conn.source === conn.target) return
     if (conn.source === oldEdge.source && conn.target === oldEdge.target) return
     useUiStore.getState().setReconnectDraft({ linkId: oldEdge.id, sourceId: conn.source, targetId: conn.target })
   }, [])
 
-  const isValidConnection = useCallback((conn: Connection | ConnectionEdgeType) => conn.source !== conn.target, [])
+  // Connections only join cards: never a collection (Semble's endpoints are URLs or cards).
+  const isValidConnection = useCallback(
+    (conn: Connection | AppEdge) =>
+      conn.source !== conn.target && itemsById.has(conn.source) && itemsById.has(conn.target),
+    [itemsById],
+  )
 
-  // Persist positions when a move completes (mouse drag end or keyboard arrow move).
+  // React Flow applies the change; the active presentation saves positions once a move ends.
+  useEffect(() => {
+    nodesRef.current = nodes
+    tryFocus()
+  }, [nodes, tryFocus])
   const handleNodesChange = useCallback(
-    (changes: NodeChange<CardNodeType>[]) => {
+    (changes: NodeChange<AppNode>[]) => {
       onNodesChange(changes)
       applySelectChanges('nodes', changes)
-      let moved = false
-      for (const c of changes) {
-        if (c.type !== 'position' || c.dragging) continue
-        const position = c.position ?? getNode(c.id)?.position
-        if (position) {
-          useUiStore.getState().movePosition(c.id, position)
-          moved = true
-        }
-      }
-      if (moved) savePositions(storageKey, useUiStore.getState().positions)
+      if (containersOn) containers.onNodesChange(changes, nodesRef.current)
+      else flat.commit(changes)
     },
-    [onNodesChange, applySelectChanges, storageKey, getNode],
+    [onNodesChange, applySelectChanges, containersOn, containers, flat],
   )
 
   // Delete/Backspace deletes selected connections (after confirmation) wherever focus is, except
@@ -301,7 +334,9 @@ export function GraphCanvas() {
 
   return (
     <div className="h-full w-full">
+      {spotlight ? <style>{spotlightCss(spotlight)}</style> : null}
       <ReactFlow
+        className={spotlight ? 'spotlighting' : undefined}
         nodes={nodes}
         edges={displayEdges}
         nodeTypes={nodeTypes}
@@ -321,7 +356,20 @@ export function GraphCanvas() {
         onNodeContextMenu={(e, node) => {
           e.preventDefault()
           useUiStore.getState().requestSelection({ nodes: [node.id], edges: [] }, { focus: false })
-          useUiStore.getState().setContextMenu({ kind: 'card', x: e.clientX, y: e.clientY, cardId: node.id })
+          useUiStore.getState().setContextMenu(
+            node.type === 'collection'
+              ? {
+                  kind: 'collection',
+                  x: e.clientX,
+                  y: e.clientY,
+                  collectionId: node.id,
+                  flow: screenToFlowPosition({ x: e.clientX, y: e.clientY }),
+                }
+              : { kind: 'card', x: e.clientX, y: e.clientY, cardId: node.id },
+          )
+        }}
+        onNodeDoubleClick={(_, node) => {
+          if (node.type === 'collection') useUiStore.getState().toggleCollapsed(node.id)
         }}
         onReconnect={onReconnect}
         reconnectRadius={14}
@@ -332,6 +380,9 @@ export function GraphCanvas() {
         multiSelectionKeyCode="Shift"
         selectionKeyCode="Shift"
         connectionLineStyle={{ stroke: 'var(--color-accent)', strokeWidth: 2, strokeDasharray: '6 4' }}
+        connectionLineType={CONNECTION_LINE_TYPE[lineStyle]}
+        snapToGrid={snapToGrid}
+        snapGrid={SNAP_GRID}
         minZoom={0.1}
         maxZoom={2}
         proOptions={{ hideAttribution: false }}
@@ -349,7 +400,7 @@ export function GraphCanvas() {
             style={{ marginRight: inspectorShown ? INSPECTOR_RESERVED : 16, marginTop: 16 }}
             ariaLabel="Minimap"
             nodeStrokeWidth={2}
-            nodeColor="var(--color-line-strong)"
+            nodeColor={(n) => (n.type === 'collection' ? 'color-mix(in srgb, var(--color-accent) 18%, transparent)' : 'var(--color-line-strong)')}
             maskColor="color-mix(in srgb, var(--color-canvas) 70%, transparent)"
           />
         ) : null}

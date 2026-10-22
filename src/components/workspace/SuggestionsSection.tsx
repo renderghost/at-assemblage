@@ -3,11 +3,12 @@ import type { GraphItem } from '../../graph/model'
 import { useSuggestions } from '../../queries/suggestions'
 import { styleForType } from '../../services/sources/semble/connectionTypes'
 import type { Suggestion } from '../../services/sources/semble/suggestions'
-import { cleanUrl, domainOf, isHttpUrl } from '../../services/sources/url'
+import { cleanUrl, domainOf } from '../../services/sources/url'
 import { useUiStore } from '../../state/uiStore'
 import { Button, Spinner } from '../ui/Button'
 import { Icon } from '../ui/Icon'
 import { InspectorGroup, InspectorSection } from './InspectorSection'
+import { PageCard } from './PageCard'
 import { TypeSwatch } from './TypeSwatch'
 
 const PREVIEW = 5
@@ -43,78 +44,37 @@ function SuggestionRow({ suggestion, card }: { suggestion: Suggestion; card: Gra
 
   const label = connected ? styleForType(type).label : null
   return (
-    <li className="flex gap-3 rounded-lg border border-line bg-surface p-2.5">
-      <Thumbnail url={suggestion.url} imageUrl={suggestion.imageUrl} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <a
-          href={isHttpUrl(suggestion.url) ? suggestion.url : undefined}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="line-clamp-2 text-[13px] font-semibold leading-snug hover:underline"
-          title={suggestion.url}
-        >
-          {suggestion.title ?? cleanUrl(suggestion.url)}
-          <span className="sr-only"> (opens in a new tab)</span>
-        </a>
-        <div className="mt-0.5 truncate text-[11.5px] text-ink-3">
-          {suggestion.siteName ?? domainOf(suggestion.url)}
-          {suggestion.libraryCount > 0 ? ` · saved by ${suggestion.libraryCount}` : ''}
+    <PageCard
+      url={suggestion.url}
+      imageUrl={suggestion.imageUrl}
+      title={suggestion.title ?? cleanUrl(suggestion.url)}
+      meta={`${suggestion.siteName ?? domainOf(suggestion.url) ?? ''}${suggestion.libraryCount > 0 ? ` · saved by ${suggestion.libraryCount}` : ''}`}
+      action={
+        suggestion.alreadyConnected ? (
+          <span className="inline-flex h-7 items-center gap-1 text-[12px] text-success">
+            <Icon name="check" size={13} /> Connected
+          </span>
+        ) : suggestion.myCardId ? (
+          <Button size="sm" onClick={connect} title="Already in your library: connect it to this card">
+            Connect
+          </Button>
+        ) : (
+          <Button size="sm" icon="plus" onClick={add} title="Add this page as a card, then connect it">
+            Add
+          </Button>
+        )
+      }
+    >
+      {connected ? (
+        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-ink-2" title={connected.note}>
+          <span className="inline-flex items-center gap-1 whitespace-nowrap">
+            <TypeSwatch type={type} withIcon width={12} />
+            {direction === 'outgoing' ? `${label} →` : `← ${label}`}
+          </span>
+          <span className="text-ink-3">by {curatorsText(connected)}</span>
         </div>
-        {connected ? (
-          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-ink-2" title={connected.note}>
-            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-              <TypeSwatch type={type} withIcon width={12} />
-              {direction === 'outgoing' ? `${label} →` : `← ${label}`}
-            </span>
-            <span className="text-ink-3">by {curatorsText(connected)}</span>
-          </div>
-        ) : null}
-        <div className="mt-2 flex justify-end">
-          {suggestion.alreadyConnected ? (
-            <span className="inline-flex h-7 items-center gap-1 text-[12px] text-success">
-              <Icon name="check" size={13} /> Connected
-            </span>
-          ) : suggestion.myCardId ? (
-            <Button size="sm" onClick={connect} title="Already in your library: connect it to this card">
-              Connect
-            </Button>
-          ) : (
-            <Button size="sm" icon="plus" onClick={add} title="Add this page as a card, then connect it">
-              Add
-            </Button>
-          )}
-        </div>
-      </div>
-    </li>
-  )
-}
-
-/** 56px square: the page's image, else its favicon on a tinted tile, else the domain's initial. */
-function Thumbnail({ url, imageUrl }: { url: string; imageUrl?: string }) {
-  const domain = domainOf(url)
-  const sources = [imageUrl && isHttpUrl(imageUrl) ? imageUrl : null, domain ? `https://${domain}/favicon.ico` : null].filter(
-    (v): v is string => !!v,
-  )
-  const [index, setIndex] = useState(0)
-  const src = sources[index]
-  const isFavicon = !!domain && src === `https://${domain}/favicon.ico`
-  return (
-    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface-2">
-      {src ? (
-        <img
-          src={src}
-          alt=""
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={() => setIndex((i) => i + 1)}
-          className={isFavicon ? 'h-6 w-6' : 'h-full w-full object-cover'}
-        />
-      ) : (
-        <span aria-hidden="true" className="text-lg font-semibold uppercase text-ink-3">
-          {(domain ?? '?').charAt(0)}
-        </span>
-      )}
-    </div>
+      ) : null}
+    </PageCard>
   )
 }
 
