@@ -11,6 +11,7 @@ import { DeleteCollectionDialog, EditCollectionDialog } from './CollectionDialog
 import { ContextMenu } from './ContextMenu'
 import { Inspector } from './Inspector'
 import { NewCardDialog, useNewCardShortcut } from './NewCardDialog'
+import { PreferencesDialog } from './PreferencesDialog'
 import { ReconnectDialog } from './ReconnectDialog'
 import { Sidebar } from './Sidebar'
 import { SidebarToggle, useSidebarShortcut } from './SidebarToggle'
@@ -112,6 +113,7 @@ export function Workspace() {
         <DeleteCardDialog />
         <DeleteConnectionDialog />
         <ReconnectDialog />
+        <PreferencesDialog />
       </WorkspaceProvider>
     </ReactFlowProvider>
   )

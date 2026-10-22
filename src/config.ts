@@ -19,8 +19,10 @@ export const config = {
   sembleWeb: 'https://semble.so',
   /** Where people leave feedback about Assemblage. */
   feedbackUrl: 'https://userinput.app/s/did:plc:jwdpg464e3fd3ivtwbhzg346/3myex37dtun2b',
-  /** Assemblage's Bluesky account (@assemblage.mu.social). */
-  blueskyUrl: 'https://bsky.app/profile/assemblage.mu.social',
+  /** Assemblage's own AT Protocol account. */
+  assemblage: { handle: 'assemblage.mu.social', did: 'did:plc:jwdpg464e3fd3ivtwbhzg346' },
+  bskyWeb: 'https://bsky.app',
+  marginWeb: 'https://margin.at',
   /** Where users manage App Passwords on the default (Bluesky-hosted) PDS. */
   appPasswordHelpUrl: 'https://bsky.app/settings/app-passwords',
   /** Sent as the Margin `generator` so notes are attributable to this client. */

@@ -24,6 +24,8 @@ const POSITION: Record<Side, Position> = {
 }
 
 function Favicon({ domain }: { domain?: string }) {
+  const siteImages = useUiStore((s) => s.preferences.siteImages)
+  if (!siteImages) return null
   if (!domain) return <span aria-hidden="true" className="h-4 w-4 shrink-0 rounded-sm bg-line" />
   return (
     <img

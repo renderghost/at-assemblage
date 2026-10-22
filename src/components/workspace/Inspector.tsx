@@ -6,6 +6,7 @@ import { INSPECTOR_INSET, INSPECTOR_WIDTH } from '../../graph/viewport'
 import { useCreateMarginNote } from '../../queries/margin'
 import { useSembleCollection } from '../../queries/collections'
 import { useSaveSembleNote } from '../../queries/notes'
+import { useSembleData } from '../../queries/suggestions'
 import { rkeyOf } from '../../services/atproto/aturi'
 import { describeError } from '../../services/atproto/errors'
 import { SembleApiError, type SembleCollectionCard } from '../../services/sources/semble/appview'
@@ -44,8 +45,9 @@ const textareaClass =
 // ——— Details ———
 
 function DetailsSection({ item, canEdit, onEdit }: { item: GraphItem; canEdit: boolean; onEdit: () => void }) {
+  const siteImages = useUiStore((s) => s.preferences.siteImages)
   const [imageFailed, setImageFailed] = useState(false)
-  const image = item.imageUrl && isHttpUrl(item.imageUrl) && !imageFailed ? item.imageUrl : null
+  const image = siteImages && item.imageUrl && isHttpUrl(item.imageUrl) && !imageFailed ? item.imageUrl : null
   return (
     <InspectorSection id="details" title="Details">
       {image ? (
@@ -634,6 +636,7 @@ function CollectionConnectionsSection({ group }: { group: GraphGroup }) {
 }
 
 function CollectionPeopleSection({ semble }: { semble: ReturnType<typeof useSembleCollection> }) {
+  const siteImages = useUiStore((s) => s.preferences.siteImages)
   const contributors = semble.data?.contributors ?? null
   const page = semble.data?.page
   return (
@@ -660,7 +663,7 @@ function CollectionPeopleSection({ semble }: { semble: ReturnType<typeof useSemb
               <ul className="space-y-1">
                 {contributors.map((u) => (
                   <li key={u.id} className="flex items-center gap-2">
-                    {u.avatarUrl ? (
+                    {siteImages && u.avatarUrl ? (
                       <img src={u.avatarUrl} alt="" referrerPolicy="no-referrer" className="h-6 w-6 shrink-0 rounded-full object-cover" />
                     ) : (
                       <span aria-hidden="true" className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11px] font-semibold text-accent">
@@ -696,6 +699,7 @@ function CollectionPeopleSection({ semble }: { semble: ReturnType<typeof useSemb
 
 function CollectionInspector({ group }: { group: GraphGroup }) {
   const semble = useSembleCollection(group.id)
+  const sembleData = useSembleData()
   const others = group.accessType === 'OPEN' && semble.data ? semble.data.page.cards : null
   const { did } = useAuth()
   return (
@@ -703,7 +707,7 @@ function CollectionInspector({ group }: { group: GraphGroup }) {
       <CollectionDetailsSection group={group} />
       <CollectionCardsSection group={group} others={others ? others.filter((c) => c.author.id !== did) : null} />
       <CollectionConnectionsSection group={group} />
-      {config.sembleApi ? <CollectionPeopleSection semble={semble} /> : null}
+      {sembleData ? <CollectionPeopleSection semble={semble} /> : null}
     </>
   )
 }

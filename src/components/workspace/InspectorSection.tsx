@@ -22,7 +22,7 @@ export function InspectorSection({ id, title, count, children }: Props) {
     <section
       id={`inspector-${id}`}
       aria-label={title}
-      className="pointer-events-auto shrink-0 overflow-hidden rounded border border-line bg-surface shadow-sm"
+      className="ui-scale pointer-events-auto shrink-0 overflow-hidden rounded border border-line bg-surface shadow-sm"
     >
       <h2>
         <button

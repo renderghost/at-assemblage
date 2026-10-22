@@ -91,10 +91,11 @@ function SuggestionRow({ suggestion, card }: { suggestion: Suggestion; card: Gra
 
 /** 56px square: the page's image, else its favicon on a tinted tile, else the domain's initial. */
 function Thumbnail({ url, imageUrl }: { url: string; imageUrl?: string }) {
+  const siteImages = useUiStore((s) => s.preferences.siteImages)
   const domain = domainOf(url)
-  const sources = [imageUrl && isHttpUrl(imageUrl) ? imageUrl : null, domain ? `https://${domain}/favicon.ico` : null].filter(
-    (v): v is string => !!v,
-  )
+  const sources = siteImages
+    ? [imageUrl && isHttpUrl(imageUrl) ? imageUrl : null, domain ? `https://${domain}/favicon.ico` : null].filter((v): v is string => !!v)
+    : []
   const [index, setIndex] = useState(0)
   const src = sources[index]
   const isFavicon = !!domain && src === `https://${domain}/favicon.ico`

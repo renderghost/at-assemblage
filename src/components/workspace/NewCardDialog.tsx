@@ -56,7 +56,8 @@ function NewCardForm({ request, onDone }: { request: AddCardRequest; onDone: () 
   const url = toUrl(rawUrl)
   // A prefilled request (e.g. from a Semble suggestion) already carries metadata.
   const prefilled = !!(request.url && (request.title || request.description)) && url === toUrl(request.url)
-  const { loading, preview } = useLinkPreview(prefilled ? null : url)
+  const { linkPreviews, siteImages } = useUiStore((s) => s.preferences)
+  const { loading, preview } = useLinkPreview(prefilled || !linkPreviews ? null : url)
   const effectiveTitle = title ?? preview?.title ?? ''
   const description = prefilled ? request.description : preview?.description
   const imageUrl = prefilled ? request.imageUrl : preview?.imageUrl
@@ -141,7 +142,7 @@ function NewCardForm({ request, onDone }: { request: AddCardRequest; onDone: () 
 
       {url ? (
         <div className="flex gap-3 rounded-md border border-line bg-surface-2 p-3" aria-live="polite">
-          {imageUrl && isHttpUrl(imageUrl) ? (
+          {siteImages && imageUrl && isHttpUrl(imageUrl) ? (
             <img src={imageUrl} alt="" referrerPolicy="no-referrer" className="h-16 w-24 shrink-0 rounded object-cover" />
           ) : null}
           <div className="min-w-0 flex-1">

@@ -150,6 +150,10 @@ type UiState = {
   requestDeleteLinks: (ids: string[]) => void
   setReconnectDraft: (draft: UiState['reconnectDraft']) => void
   setPreference: <K extends PreferenceKey>(key: K, value: Preferences[K]) => void
+  /** Replaces all preferences at once (the Preferences dialog's Save). */
+  setPreferences: (preferences: Preferences) => void
+  preferencesOpen: boolean
+  setPreferencesOpen: (open: boolean) => void
   resetPreferences: () => void
   toggleSidebar: () => void
   setSidebarTab: (tab: SidebarTab) => void
@@ -242,6 +246,12 @@ export const useUiStore = create<UiState>()((set) => ({
       saveOverrides(preferences)
       return { preferences }
     }),
+  setPreferences: (preferences) => {
+    saveOverrides(preferences)
+    set({ preferences: { ...preferences } })
+  },
+  preferencesOpen: false,
+  setPreferencesOpen: (preferencesOpen) => set({ preferencesOpen }),
   resetPreferences: () => {
     saveOverrides(DEFAULTS)
     set({ preferences: { ...DEFAULTS } })

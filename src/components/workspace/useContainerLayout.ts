@@ -26,6 +26,7 @@ import {
   loadPositions,
 } from '../../graph/positions'
 import { FOCUS_PADDING, fitPadding } from '../../graph/viewport'
+import { motion } from '../../preferences/appearance'
 import { useUiStore } from '../../state/uiStore'
 import { cardNode, type AppNode } from './canvasNodes'
 import type { CollectionNodeType } from './CollectionNode'
@@ -248,10 +249,10 @@ export function useContainerLayout(enabled: boolean) {
       const wanted = request?.focus ? request.nodes.filter((id) => placedIds.has(id) && !usedPlacements.includes(id)) : []
       if (wanted.length) {
         requestAnimationFrame(() =>
-          requestAnimationFrame(() => fitView({ nodes: wanted.map((id) => ({ id })), padding: FOCUS_PADDING, duration: 400, maxZoom: 1.1 })),
+          requestAnimationFrame(() => fitView({ nodes: wanted.map((id) => ({ id })), padding: FOCUS_PADDING, duration: motion(400), maxZoom: 1.1 })),
         )
       } else if (Object.keys(current.groups).length === 0 && toPack.length + Object.keys(flatOrigins).length > 0) {
-        requestAnimationFrame(() => requestAnimationFrame(() => fitView({ padding: fitPadding(false), duration: 300 })))
+        requestAnimationFrame(() => requestAnimationFrame(() => fitView({ padding: fitPadding(false), duration: motion(300) })))
       }
     }
     void run()

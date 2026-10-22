@@ -1,5 +1,5 @@
 import { MemoryStore } from '../test/fakePds'
-import { DEFAULTS, loadOverrides, loadPreferences, PREFERENCES_KEY, saveOverrides } from './preferences'
+import { DEFAULTS, loadOverrides, loadPreferences, PREFERENCES_KEY, samePreferences, saveOverrides } from './preferences'
 
 describe('preferences', () => {
   it('starts from the system defaults', () => {
@@ -19,5 +19,18 @@ describe('preferences', () => {
     expect(loadOverrides(store)).toEqual({ showEdgeLabels: true })
     store.setItem(PREFERENCES_KEY, '{not json')
     expect(loadPreferences(store)).toEqual(DEFAULTS)
+  })
+
+  it('keeps only connection types Semble knows', () => {
+    const store = new MemoryStore()
+    store.setItem(PREFERENCES_KEY, JSON.stringify({ defaultConnectionType: 'SUPPORTS', theme: 'dark', textSize: 'huge' }))
+    expect(loadOverrides(store)).toEqual({ defaultConnectionType: 'SUPPORTS', theme: 'dark' })
+    store.setItem(PREFERENCES_KEY, JSON.stringify({ defaultConnectionType: 'LIKES' }))
+    expect(loadOverrides(store)).toEqual({})
+  })
+
+  it('compares whole preference sets (Save is disabled when nothing changed)', () => {
+    expect(samePreferences(DEFAULTS, { ...DEFAULTS })).toBe(true)
+    expect(samePreferences(DEFAULTS, { ...DEFAULTS, lineStyle: 'angled' })).toBe(false)
   })
 })

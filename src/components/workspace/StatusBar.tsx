@@ -60,7 +60,7 @@ export function StatusBar() {
         className="pointer-events-none absolute left-0 top-3 z-30 flex justify-center px-4"
         style={{ right: inspectorShown ? INSPECTOR_RESERVED : 0 }}
       >
-        <div className="flex w-[520px] max-w-full flex-col gap-2">
+        <div className="ui-scale flex w-[520px] max-w-full flex-col gap-2">
           {notices.map((n) => (
             <NoticeToast key={n.id} notice={n} />
           ))}

@@ -2,11 +2,9 @@ import { useMemo, useRef, useState } from 'react'
 import { isFiltering, type AnnotationFilter } from '../../graph/filters'
 import { describeError } from '../../services/atproto/errors'
 import { CONNECTION_TYPES, styleForType } from '../../services/sources/semble/connectionTypes'
-import { config } from '../../config'
 import { useUiStore, type SidebarTab } from '../../state/uiStore'
 import { Alert } from '../ui/Alert'
 import { Button, IconButton, Spinner } from '../ui/Button'
-import { BlueskyIcon } from '../ui/BlueskyIcon'
 import { Icon } from '../ui/Icon'
 import { Logo } from '../ui/Logo'
 import { NEW_CARD_SHORTCUT } from './NewCardDialog'
@@ -322,28 +320,6 @@ function SidebarTabs() {
   )
 }
 
-/** Small header buttons linking out: feedback form and Assemblage on Bluesky. */
-function ExternalLinks() {
-  const linkClass =
-    'inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-line bg-surface px-1.5 text-[12px] font-medium text-ink hover:bg-surface-2'
-  return (
-    <div className="flex shrink-0 gap-1 border-t border-line px-3 py-2">
-      <a href={config.feedbackUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
-        <Icon name="feedback" size={14} />
-        Give feedback
-        <span className="sr-only"> (opens in a new tab)</span>
-      </a>
-      <a href={config.blueskyUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
-        <span className="text-[#1185fe]">
-          <BlueskyIcon size={14} />
-        </span>
-        Follow on Bluesky
-        <span className="sr-only"> (opens in a new tab)</span>
-      </a>
-    </div>
-  )
-}
-
 function NewCardButton() {
   const openAddCard = useUiStore((s) => s.openAddCard)
   return (
@@ -377,10 +353,12 @@ export function Sidebar() {
           <Logo />
         </div>
       </div>
-      <NewCardButton />
-      <SidebarTabs />
-      <ExternalLinks />
-      <UserMenu />
+      {/* Scales with Preferences → Text size; the header stays put so the toggle lines up. */}
+      <div className="ui-scale flex min-h-0 flex-1 flex-col">
+        <NewCardButton />
+        <SidebarTabs />
+        <UserMenu />
+      </div>
     </nav>
   )
 }
