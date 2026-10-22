@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useAuth } from '../../auth/AuthContext'
 import { config } from '../../config'
+import { rkeyOf } from '../../services/atproto/aturi'
 import { isHttpUrl } from '../../services/sources/url'
 import { useUiStore } from '../../state/uiStore'
 import { Icon, type IconName } from '../ui/Icon'
@@ -11,6 +13,8 @@ type Item =
   | { kind: 'link'; label: string; icon: IconName; href: string }
   | { kind: 'separator' }
 
+export const sembleCollectionPage = (handle: string, uri: string) => `${config.sembleWeb}/profile/${handle}/collections/${rkeyOf(uri)}`
+
 const sembleUrlPage = (url: string) => `${config.sembleWeb}/url/${url.split('/').map(encodeURIComponent).join('/')}`
 
 /**
@@ -21,7 +25,10 @@ const sembleUrlPage = (url: string) => `${config.sembleWeb}/url/${url.split('/')
 export function ContextMenu() {
   const menu = useUiStore((s) => s.contextMenu)
   const close = useUiStore((s) => s.setContextMenu)
-  const { library, resolveItem } = useWorkspace()
+  const { library, resolveItem, groups } = useWorkspace()
+  const { handle } = useAuth()
+  const containersOn = useUiStore((s) => s.preferences.collectionPresentation === 'containers')
+  const collectionLayouts = useUiStore((s) => s.collectionLayouts)
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
 
@@ -52,6 +59,38 @@ export function ContextMenu() {
       items.push({ kind: 'link', label: 'Open page', icon: 'external', href: item.url })
       items.push({ kind: 'link', label: 'View on Semble', icon: 'link', href: sembleUrlPage(item.url) })
     }
+  }
+
+  if (menu?.kind === 'collection') {
+    const group = groups.find((g) => g.id === menu.collectionId)
+    const collapsed = !!collectionLayouts[menu.collectionId]?.collapsed
+    items.push({
+      kind: 'action',
+      label: 'New card here',
+      icon: 'plus',
+      onSelect: () => useUiStore.getState().openAddCard({ position: menu.flow, collectionIds: [menu.collectionId] }),
+    })
+    items.push({ kind: 'action', label: 'Edit collection…', icon: 'pencil', onSelect: () => useUiStore.getState().setEditCollectionId(menu.collectionId) })
+    if (containersOn) {
+      if (!collapsed) {
+        items.push({ kind: 'action', label: 'Fit to cards', icon: 'fit', onSelect: () => useUiStore.getState().requestFitCollection(menu.collectionId) })
+      }
+      items.push({
+        kind: 'action',
+        label: collapsed ? 'Expand' : 'Collapse',
+        icon: collapsed ? 'expand' : 'collapse',
+        onSelect: () => useUiStore.getState().toggleCollapsed(menu.collectionId),
+      })
+    }
+    items.push({ kind: 'separator' })
+    if (group) items.push({ kind: 'link', label: 'View on Semble', icon: 'link', href: sembleCollectionPage(handle, group.id) })
+    items.push({
+      kind: 'action',
+      label: 'Delete collection…',
+      icon: 'trash',
+      danger: true,
+      onSelect: () => useUiStore.getState().setDeleteCollectionId(menu.collectionId),
+    })
   }
 
   // Keep the menu inside the window.
@@ -112,7 +151,7 @@ export function ContextMenu() {
     <div
       ref={ref}
       role="menu"
-      aria-label={menu.kind === 'pane' ? 'Canvas' : 'Card'}
+      aria-label={menu.kind === 'pane' ? 'Canvas' : menu.kind === 'card' ? 'Card' : 'Collection'}
       onKeyDown={onKeyDown}
       onContextMenu={(e) => e.preventDefault()}
       className="fixed z-50 min-w-48 rounded-lg border border-line bg-surface p-1 shadow-xl"

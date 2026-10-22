@@ -10,6 +10,10 @@ export type GraphGroup = {
   name: string
   description?: string
   itemCount?: number
+  /** Who can add to it, e.g. Semble's CLOSED (personal) or OPEN. Raw value as stored. */
+  accessType?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export type GraphItem = {

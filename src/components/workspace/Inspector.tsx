@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { config } from '../../config'
-import type { GraphItem, GraphLink } from '../../graph/model'
+import type { GraphGroup, GraphItem, GraphLink } from '../../graph/model'
 import { INSPECTOR_INSET, INSPECTOR_WIDTH } from '../../graph/viewport'
 import { useCreateMarginNote } from '../../queries/margin'
+import { useSembleCollection } from '../../queries/collections'
 import { useSaveSembleNote } from '../../queries/notes'
 import { rkeyOf } from '../../services/atproto/aturi'
 import { describeError } from '../../services/atproto/errors'
+import { SembleApiError, type SembleCollectionCard } from '../../services/sources/semble/appview'
 import { CONNECTION_TYPES, styleForType, typeInfo } from '../../services/sources/semble/connectionTypes'
 import { NOTE_MAX } from '../../services/sources/semble/notes'
-import { cleanUrl, isHttpUrl } from '../../services/sources/url'
+import { cleanUrl, domainOf, isHttpUrl, normaliseUrl } from '../../services/sources/url'
 import { useUiStore } from '../../state/uiStore'
 import { Alert } from '../ui/Alert'
-import { Button } from '../ui/Button'
+import { Button, Spinner } from '../ui/Button'
 import { Icon } from '../ui/Icon'
+import { accessLabel } from './CollectionNode'
 import { ConnectionEditPanel } from './ConnectionEditPanel'
+import { sembleCollectionPage } from './ContextMenu'
 import { InspectorGroup, InspectorSection } from './InspectorSection'
 import { SelectionPanel } from './SelectionPanel'
 import { SuggestionsSection } from './SuggestionsSection'
@@ -403,6 +407,307 @@ function CardInspector({ item }: { item: GraphItem }) {
   )
 }
 
+// ——— Collection inspector ———
+
+function CollectionDetailsSection({ group }: { group: GraphGroup }) {
+  const { handle } = useAuth()
+  const containersOn = useUiStore((s) => s.preferences.collectionPresentation === 'containers')
+  const collapsed = useUiStore((s) => !!s.collectionLayouts[group.id]?.collapsed)
+  const access = accessLabel(group.accessType)
+  const created = formatDate(group.createdAt)
+  const updated = group.updatedAt && group.updatedAt !== group.createdAt ? formatDate(group.updatedAt) : undefined
+  return (
+    <InspectorSection id="details" title="Details">
+      <div className="space-y-2 px-4 pb-4 pt-3 text-[14px] leading-6">
+        <div>
+          <div className="flex items-center gap-1.5 text-ink-3">
+            <Icon name="collection" size={14} /> Collection
+          </div>
+          <div className="text-[16px] font-bold leading-6 text-ink">{group.name}</div>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          <Button size="sm" variant="primary" icon="pencil" onClick={() => useUiStore.getState().setEditCollectionId(group.id)}>
+            Edit
+          </Button>
+          <a
+            href={sembleCollectionPage(handle, group.id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-[13px] font-medium text-ink hover:bg-surface-2"
+          >
+            View on Semble
+            <Icon name="link" size={14} />
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        </div>
+        {group.description ? <p className="whitespace-pre-wrap text-ink-2">{group.description}</p> : null}
+        <dl className="space-y-0.5 text-[13px]">
+          <div className="flex gap-2">
+            <dt className="w-20 shrink-0 text-ink-3">Access</dt>
+            <dd className="inline-flex items-center gap-1">
+              <Icon name={access.icon} size={13} /> {access.label} <span className="text-ink-3">— {access.hint}</span>
+            </dd>
+          </div>
+          {created ? (
+            <div className="flex gap-2">
+              <dt className="w-20 shrink-0 text-ink-3">Created</dt>
+              <dd>{created}</dd>
+            </div>
+          ) : null}
+          {updated ? (
+            <div className="flex gap-2">
+              <dt className="w-20 shrink-0 text-ink-3">Updated</dt>
+              <dd>{updated}</dd>
+            </div>
+          ) : null}
+        </dl>
+        {containersOn ? (
+          <div className="flex flex-wrap gap-1 pt-1">
+            <Button size="sm" icon={collapsed ? 'expand' : 'collapse'} onClick={() => useUiStore.getState().toggleCollapsed(group.id)}>
+              {collapsed ? 'Expand' : 'Collapse'}
+            </Button>
+            {!collapsed ? (
+              <Button size="sm" icon="fit" onClick={() => useUiStore.getState().requestFitCollection(group.id)}>
+                Fit to cards
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </InspectorSection>
+  )
+}
+
+function CardRow({ item, onSelect }: { item: GraphItem; onSelect: () => void }) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex w-full items-center gap-2 rounded border border-line bg-surface px-3 py-2 text-left hover:border-line-strong hover:bg-surface-2"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14px] font-medium leading-5 text-ink">{item.title}</span>
+          <span className="block truncate text-[12px] leading-4 text-ink-3">{item.domain ?? (item.url ? cleanUrl(item.url) : 'Note')}</span>
+        </span>
+      </button>
+    </li>
+  )
+}
+
+function CollectionCardsSection({ group, others }: { group: GraphGroup; others: SembleCollectionCard[] | null }) {
+  const { library, resolveItem } = useWorkspace()
+  const mine = useMemo(() => {
+    const ids = (library.data?.links ?? []).filter((l) => l.value.collection.uri === group.id).map((l) => l.value.card.uri as string)
+    return [...new Set(ids)].flatMap((id) => resolveItem(id) ?? [])
+  }, [library.data, group.id, resolveItem])
+  const myUrls = useMemo(() => new Set(mine.flatMap((i) => (i.url ? [normaliseUrl(i.url)] : []))), [mine])
+  const fromOthers = (others ?? []).filter((c) => !myUrls.has(normaliseUrl(c.url)))
+  const select = (id: string) => useUiStore.getState().requestSelection({ nodes: [id], edges: [] })
+
+  return (
+    <InspectorSection id="cards" title="Cards" count={mine.length + fromOthers.length}>
+      <InspectorGroup title={`Yours (${mine.length})`}>
+        {mine.length === 0 ? (
+          <p className="text-ink-3">No cards yet. Right-click the collection on the canvas to add one.</p>
+        ) : (
+          <ul className="space-y-2">
+            {mine.map((item) => (
+              <CardRow key={item.id} item={item} onSelect={() => select(item.id)} />
+            ))}
+          </ul>
+        )}
+      </InspectorGroup>
+      {fromOthers.length > 0 ? (
+        <InspectorGroup title={`Added by others (${fromOthers.length})`}>
+          <ul className="space-y-2">
+            {fromOthers.map((c) => (
+              <li key={`${c.url}:${c.author.id}`} className="flex items-start gap-2 rounded border border-line bg-surface px-3 py-2">
+                <span className="min-w-0 flex-1">
+                  <a
+                    href={isHttpUrl(c.url) ? c.url : undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block truncate text-[14px] font-medium leading-5 text-ink hover:underline"
+                  >
+                    {c.cardContent?.title ?? cleanUrl(c.url)}
+                  </a>
+                  <span className="block truncate text-[12px] leading-4 text-ink-3">
+                    {domainOf(c.url)} · added by @{c.author.handle}
+                  </span>
+                </span>
+                <Button
+                  size="sm"
+                  icon="plus"
+                  title="Add to your library, in this collection"
+                  onClick={() =>
+                    useUiStore.getState().openAddCard({
+                      url: c.url,
+                      title: c.cardContent?.title,
+                      description: c.cardContent?.description,
+                      imageUrl: c.cardContent?.imageUrl,
+                      collectionIds: [group.id],
+                    })
+                  }
+                >
+                  Add
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </InspectorGroup>
+      ) : null}
+    </InspectorSection>
+  )
+}
+
+function CollectionConnectionsSection({ group }: { group: GraphGroup }) {
+  const { data, itemsById } = useWorkspace()
+  const grouped = useMemo(() => {
+    const inside = (id: string) => !!itemsById.get(id)?.groupIds.includes(group.id)
+    const links = data.links.filter((l) => inside(l.sourceId) !== inside(l.targetId))
+    const byType = new Map<string, GraphLink[]>()
+    for (const l of links) {
+      const key = typeInfo(l.type)?.value ?? (l.type?.trim().toUpperCase() || '')
+      byType.set(key, [...(byType.get(key) ?? []), l])
+    }
+    const order = CONNECTION_TYPES.map((t) => t.value)
+    return {
+      inside,
+      total: links.length,
+      groups: [...byType].sort(([a], [b]) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99)),
+    }
+  }, [data.links, itemsById, group.id])
+
+  const selectLink = (link: GraphLink) => {
+    // Its card may be hidden in this (collapsed) collection: open it first.
+    useUiStore.getState().toggleCollapsed(group.id, false)
+    useUiStore.getState().requestSelection({ nodes: [], edges: [link.id] })
+  }
+
+  return (
+    <InspectorSection id="connections" title="Connections" count={grouped.total}>
+      {grouped.total === 0 ? (
+        <InspectorGroup>
+          <p className="text-ink-3">No connections between this collection's cards and cards outside it.</p>
+        </InspectorGroup>
+      ) : (
+        grouped.groups.map(([type, links]) => (
+          <InspectorGroup
+            key={type}
+            title={
+              <span className="flex items-center gap-2">
+                <TypeSwatch type={type || undefined} withIcon width={14} />
+                {styleForType(type || undefined).label}
+              </span>
+            }
+          >
+            <ul className="space-y-2">
+              {links.map((l) => {
+                const out = grouped.inside(l.sourceId)
+                const own = itemsById.get(out ? l.sourceId : l.targetId)
+                const other = itemsById.get(out ? l.targetId : l.sourceId)
+                return (
+                  <li key={l.id}>
+                    <button
+                      type="button"
+                      onClick={() => selectLink(l)}
+                      className="w-full rounded border border-line bg-surface px-3 py-2 text-left hover:border-line-strong hover:bg-surface-2"
+                    >
+                      <span className="block truncate text-[12px] leading-4 text-ink-3">{own?.title ?? 'Card'}</span>
+                      <span className="flex items-center gap-1.5 text-[14px] font-medium leading-5 text-ink">
+                        <span className="shrink-0 text-ink-3" aria-label={out ? 'to' : 'from'}>
+                          {out ? '→' : '←'}
+                        </span>
+                        <span className="min-w-0 truncate">{other?.title ?? 'Unknown card'}</span>
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </InspectorGroup>
+        ))
+      )}
+    </InspectorSection>
+  )
+}
+
+function CollectionPeopleSection({ semble }: { semble: ReturnType<typeof useSembleCollection> }) {
+  const contributors = semble.data?.contributors ?? null
+  const page = semble.data?.page
+  return (
+    <InspectorSection id="people" title="People" count={contributors ? contributors.length : semble.isPending ? null : undefined}>
+      <InspectorGroup>
+        {semble.isPending ? (
+          <Spinner label="Asking Semble…" />
+        ) : semble.isError ? (
+          <div className="flex items-center gap-2 text-ink-3">
+            <span>{semble.error instanceof SembleApiError ? semble.error.message : 'Could not load from Semble.'}</span>
+            <button type="button" className="text-accent hover:underline" onClick={() => semble.refetch()}>
+              Retry
+            </button>
+          </div>
+        ) : (
+          <>
+            {page?.followerCount !== undefined ? (
+              <p className="text-ink-2">
+                {page.followerCount} follower{page.followerCount === 1 ? '' : 's'} on Semble
+                {page.cardCount !== undefined ? ` · ${page.cardCount} card${page.cardCount === 1 ? '' : 's'} in total` : ''}
+              </p>
+            ) : null}
+            {contributors && contributors.length > 0 ? (
+              <ul className="space-y-1">
+                {contributors.map((u) => (
+                  <li key={u.id} className="flex items-center gap-2">
+                    {u.avatarUrl ? (
+                      <img src={u.avatarUrl} alt="" referrerPolicy="no-referrer" className="h-6 w-6 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <span aria-hidden="true" className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11px] font-semibold text-accent">
+                        {u.handle.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <a
+                      href={`${config.sembleWeb}/profile/${u.handle}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="min-w-0 flex-1 truncate text-accent hover:underline"
+                    >
+                      @{u.handle}
+                    </a>
+                    {u.contributionCount !== undefined ? (
+                      <span className="shrink-0 text-[12px] text-ink-3">
+                        {u.contributionCount} card{u.contributionCount === 1 ? '' : 's'}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-ink-3">No contributors yet.</p>
+            )}
+          </>
+        )}
+        <p className="text-[11.5px] leading-snug text-ink-3">From Semble's public data.</p>
+      </InspectorGroup>
+    </InspectorSection>
+  )
+}
+
+function CollectionInspector({ group }: { group: GraphGroup }) {
+  const semble = useSembleCollection(group.id)
+  const others = group.accessType === 'OPEN' && semble.data ? semble.data.page.cards : null
+  const { did } = useAuth()
+  return (
+    <>
+      <CollectionDetailsSection group={group} />
+      <CollectionCardsSection group={group} others={others ? others.filter((c) => c.author.id !== did) : null} />
+      <CollectionConnectionsSection group={group} />
+      {config.sembleApi ? <CollectionPeopleSection semble={semble} /> : null}
+    </>
+  )
+}
+
 /**
  * The inspector floats over the canvas's right edge as a stack of
  * independently collapsible cards. The column itself ignores the pointer, so
@@ -411,7 +716,7 @@ function CardInspector({ item }: { item: GraphItem }) {
  */
 export function Inspector() {
   const selected = useUiStore((s) => s.selected)
-  const { itemsById, linksById, connectionRecords } = useWorkspace()
+  const { itemsById, linksById, connectionRecords, groups } = useWorkspace()
   const shown = selected.nodes.length + selected.edges.length > 0
 
   // While sliding out, keep showing the last selection until it is off screen.
@@ -421,6 +726,7 @@ export function Inspector() {
 
   const count = view.nodes.length + view.edges.length
   const item = view.nodes.length === 1 && count === 1 ? itemsById.get(view.nodes[0]!) : undefined
+  const group = view.nodes.length === 1 && count === 1 && !item ? groups.find((g) => g.id === view.nodes[0]) : undefined
   const link = view.edges.length === 1 && count === 1 ? linksById.get(view.edges[0]!) : undefined
 
   // Start each new selection at the top of the stack.
@@ -445,6 +751,8 @@ export function Inspector() {
     >
       {item ? (
         <CardInspector key={item.id} item={item} />
+      ) : group ? (
+        <CollectionInspector key={group.id} group={group} />
       ) : link ? (
         <InspectorSection id="connection" title="Connection">
           <ConnectionEditPanel key={`${link.id}:${connectionRecords.get(link.id)?.cid}`} link={link} />

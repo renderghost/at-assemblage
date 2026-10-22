@@ -3,13 +3,15 @@ import { memo } from 'react'
 import { SIDES, sourceHandleId, targetHandleId, type Side } from '../../graph/edgeSides'
 import type { GraphItem } from '../../graph/model'
 import { NODE_WIDTH } from '../../graph/layout'
+import { useUiStore } from '../../state/uiStore'
 import { Icon } from '../ui/Icon'
 
 export type CardNodeData = {
   item: GraphItem
   annotationCount: number
   /** Collection names to badge, only when more than one collection is loaded. */
-  groupBadges: string[]
+  /** Collections to badge: all of them when several are shown flat, or the other ones in container mode. */
+  groupBadges: { id: string; name: string }[]
 }
 
 export type CardNodeType = Node<CardNodeData, 'card'>
@@ -99,10 +101,19 @@ function CardNodeImpl({ id, data, selected }: NodeProps<CardNodeType>) {
       {notePreview ? <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-ink-2">{notePreview}</p> : null}
       {groupBadges.length > 0 ? (
         <div className="mt-1.5 flex flex-wrap gap-1">
-          {groupBadges.map((name) => (
-            <span key={name} className="max-w-full truncate rounded border border-line px-1.5 py-px text-[10.5px] text-ink-3">
-              {name}
-            </span>
+          {groupBadges.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              title={`Show ${g.name}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                useUiStore.getState().requestSelection({ nodes: [g.id], edges: [] })
+              }}
+              className="nodrag max-w-full truncate rounded border border-line px-1.5 py-px text-[10.5px] text-ink-3 hover:border-accent hover:text-accent"
+            >
+              {g.name}
+            </button>
           ))}
         </div>
       ) : null}

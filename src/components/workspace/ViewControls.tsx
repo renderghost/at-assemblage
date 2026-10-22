@@ -50,9 +50,9 @@ export function ViewControls() {
   const { zoomIn, zoomOut, zoomTo, fitView, getEdges } = useReactFlow()
   const zoom = useStore((s) => s.transform[2])
   const hasSelection = useUiStore((s) => s.selected.nodes.length + s.selected.edges.length > 0)
-  const showMinimap = useUiStore((s) => s.showMinimap)
+  const showMinimap = useUiStore((s) => s.preferences.showMinimap)
   const minimapFits = useMinimapFits()
-  const setShowMinimap = useUiStore((s) => s.setShowMinimap)
+  const setPreference = useUiStore((s) => s.setPreference)
 
   const fit = useCallback(() => {
     const { selected } = useUiStore.getState()
@@ -113,7 +113,7 @@ export function ViewControls() {
             icon="minimap"
             label={showMinimap ? 'Hide minimap' : 'Show minimap'}
             pressed={showMinimap}
-            onClick={() => setShowMinimap(!showMinimap)}
+            onClick={() => setPreference('showMinimap', !showMinimap)}
           />
         ) : null}
       </div>

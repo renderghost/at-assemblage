@@ -12,7 +12,15 @@ import type {
 } from './types'
 
 export function collectionToGroup(rec: StoredRecord<CollectionRecord>, itemCount?: number): GraphGroup {
-  return { id: rec.uri, name: rec.value.name, description: rec.value.description, itemCount }
+  return {
+    id: rec.uri,
+    name: rec.value.name,
+    description: rec.value.description,
+    itemCount,
+    accessType: String(rec.value.accessType),
+    createdAt: rec.value.createdAt,
+    updatedAt: rec.value.updatedAt,
+  }
 }
 
 /** Number of cards linked to each collection URI. */

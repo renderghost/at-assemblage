@@ -44,7 +44,7 @@ These are what Semble actually stores. They differ in places from the original b
 
 | Concept | Record | Notes |
 | --- | --- | --- |
-| Collection | `network.cosmik.collection` | Name, description, access type. |
+| Collection | `network.cosmik.collection` | `name` (≤100), `description` (≤500), `accessType` (`CLOSED` = Personal, `OPEN` = anyone can add), `createdAt`, `updatedAt`. `collaborators` is kept untouched when editing; Semble's app doesn't use it. |
 | Card | `network.cosmik.card` | `URL` cards (URL plus metadata) or `NOTE` cards. A note with a `parentCard` is shown as a note on that card. |
 | Card ↔ collection | `network.cosmik.collectionLink` | **Membership is a separate record.** It is not a field on the card. |
 | Connection | `network.cosmik.connection` | `source`, `target` (URL **or** AT URI), optional `connectionType`, optional `note`. Semble's own UI writes card URLs, and so do we. |
@@ -98,6 +98,54 @@ The new card is selected and zoomed to once it appears on the canvas. If none of
 **Collections.** Click **New collection** at the top of the sidebar's collection list. Enter a name (up to 100 characters), an optional description (up to 500), and a collaboration setting. The settings are Semble's: Personal (`CLOSED`, the default) or Open (`OPEN`). The new collection is ticked straight away.
 
 **Account menu.** The button at the bottom of the sidebar shows your Bluesky display name and avatar. Both are read from the `app.bsky.actor.profile` record on your own PDS; the avatar is served by the PDS's public `getBlob` endpoint. The menu holds your handle and DID (with a copy button), the two display settings, and Sign out.
+
+### Collections on the canvas
+
+With **Collections: Containers** (the default; account menu → Settings), each shown collection is a box around its cards. With **Flat**, cards are laid out freely with collection badges, as before.
+
+- **Boxes.** A tinted box with a header showing the name, Personal/Open icon, card count and collapse chevron.
+  - Drag the header to move the box with its cards.
+  - Select the box to resize it from any edge or corner. It can't shrink past its cards.
+  - Drag a card past an edge and the box grows to keep wrapping it, in any direction. This uses React Flow's `expandParent`; the box also keeps clear of the header and its padding.
+  - **Fit to cards** (right-click, or the inspector) wraps the cards snugly with padding.
+- **Collapse and expand.** Use the chevron or double-click. A collapsed collection becomes one compact node.
+  - Connections to its hidden cards are **rolled up** into one edge per outside card and direction, labelled with the type or "*n* connections".
+  - Connections between two cards of the same collapsed collection are hidden.
+  - Selecting a hidden card or connection from the inspector expands the collection first.
+- **Cards in several collections.** A card sits in its **primary** collection: the first shown one it belongs to. Badges name its other shown collections; click one to open that collection.
+- **Where things are saved.** Everything is per browser, in `localStorage`, never on the PDS.
+  - Each collection's own layout (card positions relative to the box, size, collapsed), per account. This is independent of which other collections are shown.
+  - Where each box sits, plus any cards outside a box, per account and set of shown collections.
+  - The first time a collection becomes a box, it keeps the arrangement its cards had on the flat canvas, if any; otherwise ELK lays it out. Boxes are packed so they don't overlap.
+- **Right-click a collection:**
+  - **New card here**: placed where you clicked, with the collection pre-ticked. A card created from empty canvas outside its box goes inside the box instead.
+  - **Edit collection…**, **Fit to cards**, **Collapse/Expand**, **View on Semble**, **Delete collection…**
+- **Connections never start or end at a collection.** Semble's connection endpoints are URLs or cards (`UrlOrCardIdType` is `URL | CARD`), so collection-to-card lines are derived from membership, never stored.
+
+**Collection inspector.** Select a box (or a card's collection badge):
+
+| Section | Contents |
+| --- | --- |
+| **Details** | Name, description, access (Personal/Open), created and updated dates; **Edit**, **View on Semble**, **Collapse/Expand**, **Fit to cards** |
+| **Cards (n)** | **Yours**, from your `collectionLink`s (click to select). For Open collections, **Added by others**: cards other people added, which live in their repos and come from Semble's public `collection.getByAtUri`. **Add** puts one into your library, in this collection. |
+| **Connections (n)** | Connections between the collection's cards and cards outside it, grouped by type and showing direction |
+| **People (n)** | Contributors and follower count, from Semble's public `collection.getContributors` and `getByAtUri` |
+
+**Editing and deleting collections.**
+- **Edit** changes what Semble's own update supports: name, description, Personal/Open. It's updated in place with `swapRecord`, keeping `createdAt` and `collaborators` and setting `updatedAt`. Semble's indexer applies collection updates.
+- **Delete** removes the collection record and your `collectionLink`s to it in one commit. Cards stay in your library and other collections.
+
+### Preferences
+
+`src/preferences/preferences.ts` holds the **system defaults** for every preference, and is the one place to change them. Only a user's overrides are stored (`assemblage:preferences:v1`, per browser), each validated on load. So changing a default reaches everyone who hasn't changed that setting, and a bad stored value falls back to the default.
+
+Current preferences:
+- connection labels
+- outside cards
+- minimap
+- collection presentation
+
+**Reset settings to defaults** is in the account menu. Preferences survive sign-out. Sidebar and inspector open/closed state is remembered separately, as UI state.
 
 ### Suggestions from Semble
 
@@ -273,6 +321,9 @@ npm test
 | `src/services/sources/semble/create.test.ts` | New card, note and link records shaped like Semble's; URL validation; reusing an existing card (links only for missing collections, one note per link); a single commit whose locally computed CIDs match the PDS's; collection records and lexicon limits |
 | `src/services/sources/semble/notes.test.ts` | Adding a Semble note linked to a card, editing it in place, refusing an edit when the note changed elsewhere |
 | `src/services/sources/semble/cards.test.ts` | Changing a card's collections in one commit; deleting a card with its note, links and connections (matched by URL or AT URI), leaving unrelated records |
+| `src/graph/containers.test.ts` | Primary collection; wrapping (grows only, moves origin left/up with a matching shift); fit to cards; placing new cards; packing boxes without overlap or one long strip; roll-ups |
+| `src/preferences/preferences.test.ts` | Defaults; only overrides stored; invalid or unknown stored values fall back |
+| `src/services/sources/semble/collections.test.ts` | Collection edit in place (fields kept, `updatedAt` set), conflict refusal, lexicon limits; delete removes the collection and its links in one commit, keeping cards |
 | `src/services/linkPreview.test.ts` | Preview mapping; failure and disabled cases |
 | `src/services/sources/semble/appview.test.ts` | Semble API calls (plain GET, no credentials), lenient response validation, error mapping |
 | `src/services/sources/semble/recommendType.test.ts` | Same-resource signals (DOI, ISBN, archive copies, cosmetic URL differences) and staying silent for different pages. Consensus thresholds (2+ people, majority, same direction, one vote per person, own connections and unknown types excluded). Same-resource takes priority. |
@@ -347,8 +398,25 @@ Scale, measured in headless Chromium with software rendering:
 
 Panning stays usable at 300 cards: about 28 fps headless, which should be higher on GPU-backed browsers.
 
+A run in Chrome covered collections on the canvas:
+- dragging a card past a box's left edge (the box grew and the card stayed inside)
+- moving a box by its header
+- resizing, then **Fit to cards** shrinking it back
+- the collection inspector's four sections, with Semble data mocked
+- a card's badge opening its other collection
+- others' cards in an Open collection
+- collapsing by double-click (4 labelled roll-ups, hidden cards), surviving a reload, and expanding by chevron
+- the collection menu and **New card here** (the card lands inside the box)
+- editing in place (description, `createdAt` kept; `updatedAt` set)
+- switching to Flat and resetting to defaults
+- deleting a collection (its links removed, cards kept)
+- no console errors
+
 ## Known limitations
 
+- **Collections are containers or flat; the hub-node presentation is still to come** ([#16](https://github.com/renderghost/at-assemblage/issues/16)).
+- **Dragging a card into another collection's box doesn't change its collections.** Positions only; use Edit card.
+- **Box layouts are per browser**, like card positions.
 - **Own records only.** Cards that other people added to your open collections live in their repos and are not loaded. The same applies to other people's connections and Margin notes. Reading those needs an AppView.
 - **Margin notes are basic.** You can read your own notes on a card's URL and create plain `commenting` notes. Editing, highlights, selectors and bookmarks are not supported.
 - **Changing a connection's type or ends gives it a new AT URI.** This is the price of staying in sync with Semble (see [Editing connections](#editing-connections)). Anything that linked to the old URI will not follow it.
