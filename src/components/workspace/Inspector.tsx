@@ -21,6 +21,7 @@ import { accessLabel } from './CollectionNode'
 import { ConnectionEditPanel } from './ConnectionEditPanel'
 import { sembleCollectionPage } from './ContextMenu'
 import { InspectorGroup, InspectorSection } from './InspectorSection'
+import { PageCard } from './PageCard'
 import { SelectionPanel } from './SelectionPanel'
 import { SuggestionsSection } from './SuggestionsSection'
 import { TypeSwatch } from './TypeSwatch'
@@ -481,19 +482,21 @@ function CollectionDetailsSection({ group }: { group: GraphGroup }) {
 }
 
 function CardRow({ item, onSelect }: { item: GraphItem; onSelect: () => void }) {
+  const notes = item.notes.length
   return (
-    <li>
-      <button
-        type="button"
-        onClick={onSelect}
-        className="flex w-full items-center gap-2 rounded border border-line bg-surface px-3 py-2 text-left hover:border-line-strong hover:bg-surface-2"
-      >
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-medium leading-5 text-ink">{item.title}</span>
-          <span className="block truncate text-[12px] leading-4 text-ink-3">{item.domain ?? (item.url ? cleanUrl(item.url) : 'Note')}</span>
-        </span>
-      </button>
-    </li>
+    <PageCard
+      url={item.url}
+      imageUrl={item.imageUrl}
+      note={item.kind === 'NOTE'}
+      title={item.title}
+      onOpen={onSelect}
+      meta={`${item.siteName ?? item.domain ?? (item.url ? cleanUrl(item.url) : 'Note card')}${notes ? ` · ${notes} note${notes === 1 ? '' : 's'}` : ''}`}
+      action={
+        <Button size="sm" icon="focus" onClick={onSelect} title="Select it on the canvas">
+          Select
+        </Button>
+      }
+    />
   )
 }
 
@@ -524,37 +527,31 @@ function CollectionCardsSection({ group, others }: { group: GraphGroup; others: 
         <InspectorGroup title={`Added by others (${fromOthers.length})`}>
           <ul className="space-y-2">
             {fromOthers.map((c) => (
-              <li key={`${c.url}:${c.author.id}`} className="flex items-start gap-2 rounded border border-line bg-surface px-3 py-2">
-                <span className="min-w-0 flex-1">
-                  <a
-                    href={isHttpUrl(c.url) ? c.url : undefined}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block truncate text-[14px] font-medium leading-5 text-ink hover:underline"
+              <PageCard
+                key={`${c.url}:${c.author.id}`}
+                url={c.url}
+                imageUrl={c.cardContent?.imageUrl}
+                title={c.cardContent?.title ?? cleanUrl(c.url)}
+                meta={`${domainOf(c.url) ?? ''} · added by @${c.author.handle}`}
+                action={
+                  <Button
+                    size="sm"
+                    icon="plus"
+                    title="Add to your library, in this collection"
+                    onClick={() =>
+                      useUiStore.getState().openAddCard({
+                        url: c.url,
+                        title: c.cardContent?.title,
+                        description: c.cardContent?.description,
+                        imageUrl: c.cardContent?.imageUrl,
+                        collectionIds: [group.id],
+                      })
+                    }
                   >
-                    {c.cardContent?.title ?? cleanUrl(c.url)}
-                  </a>
-                  <span className="block truncate text-[12px] leading-4 text-ink-3">
-                    {domainOf(c.url)} · added by @{c.author.handle}
-                  </span>
-                </span>
-                <Button
-                  size="sm"
-                  icon="plus"
-                  title="Add to your library, in this collection"
-                  onClick={() =>
-                    useUiStore.getState().openAddCard({
-                      url: c.url,
-                      title: c.cardContent?.title,
-                      description: c.cardContent?.description,
-                      imageUrl: c.cardContent?.imageUrl,
-                      collectionIds: [group.id],
-                    })
-                  }
-                >
-                  Add
-                </Button>
-              </li>
+                    Add
+                  </Button>
+                }
+              />
             ))}
           </ul>
         </InspectorGroup>
