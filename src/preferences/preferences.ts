@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { DEFAULT_CONNECTION_TYPE, typeInfo } from '../services/sources/semble/connectionTypes'
 
 /**
  * User preferences. `DEFAULTS` is the system default for everyone and the one
@@ -9,24 +10,62 @@ import { z } from 'zod'
  * `useUiStore((s) => s.preferences.<key>)` and set it with `setPreference`.
  */
 const SCHEMA = {
+  // Appearance
+  theme: z.enum(['system', 'light', 'dark']),
+  textSize: z.enum(['normal', 'large', 'larger']),
+  reduceMotion: z.enum(['system', 'always']),
+  // Canvas
+  /** How collections appear on the canvas. */
+  collectionPresentation: z.enum(['containers', 'flat']),
+  lineStyle: z.enum(['curved', 'straight', 'angled']),
   /** Always show connection labels (otherwise on hover or selection). */
   showEdgeLabels: z.boolean(),
   /** Show cards outside the selected collections that connections reach. */
   showExternal: z.boolean(),
   /** Show the minimap (it also hides itself when there isn't room). */
   showMinimap: z.boolean(),
-  /** How collections appear on the canvas. */
-  collectionPresentation: z.enum(['containers', 'flat']),
+  snapToGrid: z.boolean(),
+  /** After adding a card, zoom the canvas to it. */
+  zoomToNewCards: z.boolean(),
+  // Connections
+  /** Type a new connection starts on when there's no recommendation. */
+  defaultConnectionType: z.string().refine((v) => !!typeInfo(v)),
+  recommendedType: z.enum(['preselect', 'badge', 'off']),
+  confirmDeleteConnections: z.enum(['always', 'several', 'never']),
+  // Privacy & data
+  /** Semble's public API: suggestions, others' cards and contributors, recommended types. */
+  useSembleData: z.boolean(),
+  /** Bluesky's link-card service, to prefill a new card's title. */
+  linkPreviews: z.boolean(),
+  /** Favicons, thumbnails and avatars loaded from other sites. */
+  siteImages: z.boolean(),
 } satisfies Record<string, z.ZodTypeAny>
 
 export type Preferences = { [K in keyof typeof SCHEMA]: z.infer<(typeof SCHEMA)[K]> }
 export type PreferenceKey = keyof Preferences
 
 export const DEFAULTS: Preferences = {
+  theme: 'system',
+  textSize: 'normal',
+  reduceMotion: 'system',
+  collectionPresentation: 'containers',
+  lineStyle: 'curved',
   showEdgeLabels: false,
   showExternal: true,
   showMinimap: true,
-  collectionPresentation: 'containers',
+  snapToGrid: false,
+  zoomToNewCards: true,
+  defaultConnectionType: DEFAULT_CONNECTION_TYPE,
+  recommendedType: 'preselect',
+  confirmDeleteConnections: 'always',
+  useSembleData: true,
+  linkPreviews: true,
+  siteImages: true,
+}
+
+/** True when two preference sets are identical. */
+export function samePreferences(a: Preferences, b: Preferences): boolean {
+  return (Object.keys(DEFAULTS) as PreferenceKey[]).every((k) => a[k] === b[k])
 }
 
 export const PREFERENCES_KEY = 'assemblage:preferences:v1'

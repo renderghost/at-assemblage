@@ -1,8 +1,10 @@
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type Edge, type EdgeProps } from '@xyflow/react'
+import { BaseEdge, EdgeLabelRenderer, type Edge, type EdgeProps } from '@xyflow/react'
 import { memo } from 'react'
 import type { GraphLink } from '../../graph/model'
 import type { EdgeStyle } from '../../services/sources/semble/connectionTypes'
+import { useUiStore } from '../../state/uiStore'
 import { Icon } from '../ui/Icon'
+import { edgePath } from './edgePath'
 
 export type ConnectionEdgeData = {
   link?: GraphLink
@@ -17,7 +19,8 @@ export type ConnectionEdgeType = Edge<ConnectionEdgeData, 'connection'>
 
 function ConnectionEdgeImpl(props: EdgeProps<ConnectionEdgeType>) {
   const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, selected, data } = props
-  const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
+  const lineStyle = useUiStore((s) => s.preferences.lineStyle)
+  const [path, labelX, labelY] = edgePath(lineStyle, { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
   if (!data) return null
   const { style, pending } = data
   const stroke = pending ? 'var(--color-accent)' : style.colour

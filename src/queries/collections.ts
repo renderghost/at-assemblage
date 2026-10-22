@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthContext'
-import { config } from '../config'
 import { removeCollectionLayout } from '../graph/positions'
 import { rkeyOf } from '../services/atproto/aturi'
 import type { ListResult, StoredRecord } from '../services/sources/records'
@@ -12,6 +11,7 @@ import type { NewCollectionInput } from '../services/sources/semble/create'
 import type { CollectionRecord, SembleLibrary } from '../services/sources/semble/types'
 import { useUiStore } from '../state/uiStore'
 import { queryKeys } from './keys'
+import { useSembleData } from './suggestions'
 
 export function useUpdateCollection() {
   const { client, did } = useAuth()
@@ -65,9 +65,10 @@ export function useDeleteCollection() {
  */
 export function useSembleCollection(collectionUri: string) {
   const { handle } = useAuth()
+  const enabled = useSembleData()
   return useQuery({
     queryKey: ['semble-api', 'collection', collectionUri],
-    enabled: !!config.sembleApi,
+    enabled,
     staleTime: 5 * 60_000,
     retry: 1,
     queryFn: async ({ signal }) => {

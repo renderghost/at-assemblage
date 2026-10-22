@@ -18,12 +18,14 @@ import { rollupLinks } from '../../graph/containers'
 import { chooseSides, sourceHandleId, targetHandleId } from '../../graph/edgeSides'
 import { NODE_HEIGHT, NODE_WIDTH } from '../../graph/layout'
 import { FOCUS_PADDING, INSPECTOR_RESERVED, fitPadding } from '../../graph/viewport'
+import { motion } from '../../preferences/appearance'
 import { styleForType } from '../../services/sources/semble/connectionTypes'
 import { useUiStore } from '../../state/uiStore'
 import { CardNode } from './CardNode'
 import type { AppNode } from './canvasNodes'
 import { CollectionNode } from './CollectionNode'
 import { ConnectionEdge, type ConnectionEdgeType } from './ConnectionEdge'
+import { CONNECTION_LINE_TYPE } from './edgePath'
 import { RollupEdge, type RollupEdgeType } from './RollupEdge'
 import { useContainerLayout } from './useContainerLayout'
 import { useFlatLayout } from './useFlatLayout'
@@ -34,6 +36,8 @@ import { useWorkspace } from './WorkspaceContext'
 const nodeTypes = { card: CardNode, collection: CollectionNode }
 const edgeTypes = { connection: ConnectionEdge, rollup: RollupEdge }
 const DRAFT_EDGE_ID = '__draft__'
+/** Matches the background dots. */
+const SNAP_GRID: [number, number] = [20, 20]
 
 type AppEdge = ConnectionEdgeType | RollupEdgeType
 
@@ -54,6 +58,8 @@ export function GraphCanvas() {
   const draft = useUiStore((s) => s.draft)
   const showEdgeLabels = useUiStore((s) => s.preferences.showEdgeLabels)
   const presentation = useUiStore((s) => s.preferences.collectionPresentation)
+  const lineStyle = useUiStore((s) => s.preferences.lineStyle)
+  const snapToGrid = useUiStore((s) => s.preferences.snapToGrid)
   // The minimap sits top right, left of the inspector while it shows; it hides on a narrow canvas.
   const minimapFits = useMinimapFits()
   const inspectorShown = useInspectorShown()
@@ -77,7 +83,7 @@ export function GraphCanvas() {
     fittedFor.current = scopeKey
     const { selected } = useUiStore.getState()
     const padding = fitPadding(selected.nodes.length + selected.edges.length > 0)
-    requestAnimationFrame(() => requestAnimationFrame(() => fitView({ padding, duration: 0 })))
+    requestAnimationFrame(() => requestAnimationFrame(() => fitView({ padding, duration: motion(0) })))
   }, [hasNodes, scopeKey, fitView])
 
   const derivedEdges: AppEdge[] = useMemo(() => {
@@ -191,7 +197,7 @@ export function GraphCanvas() {
       const link = data.links.find((l) => l.id === id)
       if (link) focus.push(link.sourceId, link.targetId)
     }
-    if (selectionRequest.focus && focus.length) fitView({ nodes: focus.map((id) => ({ id })), padding: FOCUS_PADDING, duration: 300, maxZoom: 1.2 })
+    if (selectionRequest.focus && focus.length) fitView({ nodes: focus.map((id) => ({ id })), padding: FOCUS_PADDING, duration: motion(300), maxZoom: 1.2 })
     // Only when a new request arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionRequest?.nonce])
@@ -316,6 +322,9 @@ export function GraphCanvas() {
         multiSelectionKeyCode="Shift"
         selectionKeyCode="Shift"
         connectionLineStyle={{ stroke: 'var(--color-accent)', strokeWidth: 2, strokeDasharray: '6 4' }}
+        connectionLineType={CONNECTION_LINE_TYPE[lineStyle]}
+        snapToGrid={snapToGrid}
+        snapGrid={SNAP_GRID}
         minZoom={0.1}
         maxZoom={2}
         proOptions={{ hideAttribution: false }}

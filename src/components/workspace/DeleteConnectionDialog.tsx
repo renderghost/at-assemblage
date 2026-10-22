@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useBulkConnectionWrites, useDeleteConnection } from '../../queries/semble'
 import { styleForType } from '../../services/sources/semble/connectionTypes'
 import { useUiStore } from '../../state/uiStore'
@@ -15,6 +16,8 @@ export function DeleteConnectionDialog() {
   const open = links.length > 0
   const close = () => requestDeleteLinks([])
   const single = links.length === 1 ? links[0]! : null
+  const ask = useUiStore((s) => s.preferences.confirmDeleteConnections)
+  const skipConfirm = ask === 'never' || (ask === 'several' && !!single)
 
   const confirm = () => {
     close()
@@ -26,8 +29,13 @@ export function DeleteConnectionDialog() {
       })
   }
 
+  // Preferences → Confirm before deleting connections: delete straight away when not asked to confirm.
+  useEffect(() => {
+    if (open && skipConfirm) confirm()
+  })
+
   return (
-    <Dialog open={open} title={single ? 'Delete connection?' : `Delete ${links.length} connections?`} onClose={close}>
+    <Dialog open={open && !skipConfirm} title={single ? 'Delete connection?' : `Delete ${links.length} connections?`} onClose={close}>
       {open ? (
         <div className="space-y-4">
           {single ? (

@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { layoutGraph, NODE_HEIGHT, type Positions } from '../../graph/layout'
 import { layoutStorageKey, loadPositions, savePositions } from '../../graph/positions'
 import { FOCUS_PADDING, fitPadding } from '../../graph/viewport'
+import { motion } from '../../preferences/appearance'
 import { useUiStore } from '../../state/uiStore'
 import type { CardNodeType } from './CardNode'
 import { cardNode, type AppNode } from './canvasNodes'
@@ -70,10 +71,10 @@ export function useFlatLayout(enabled: boolean) {
       const requested = useUiStore.getState().selectionRequest?.nodes.filter((id) => placed[id]) ?? []
       if (requested.length) {
         requestAnimationFrame(() =>
-          fitView({ nodes: requested.map((id) => ({ id })), padding: FOCUS_PADDING, duration: 400, maxZoom: 1.1 }),
+          fitView({ nodes: requested.map((id) => ({ id })), padding: FOCUS_PADDING, duration: motion(400), maxZoom: 1.1 }),
         )
       } else if (Object.keys(current).length === 0) {
-        requestAnimationFrame(() => fitView({ padding: fitPadding(false), duration: 300 }))
+        requestAnimationFrame(() => fitView({ padding: fitPadding(false), duration: motion(300) }))
       }
     })
     return () => {

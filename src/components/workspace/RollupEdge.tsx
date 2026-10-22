@@ -1,7 +1,9 @@
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type Edge, type EdgeProps } from '@xyflow/react'
+import { BaseEdge, EdgeLabelRenderer, type Edge, type EdgeProps } from '@xyflow/react'
 import { memo } from 'react'
 import { styleForType } from '../../services/sources/semble/connectionTypes'
+import { useUiStore } from '../../state/uiStore'
 import { Icon } from '../ui/Icon'
+import { edgePath } from './edgePath'
 
 export type RollupEdgeData = { count: number; types: string[] }
 export type RollupEdgeType = Edge<RollupEdgeData, 'rollup'>
@@ -12,7 +14,8 @@ export type RollupEdgeType = Edge<RollupEdgeData, 'rollup'>
  * mixed types are drawn neutral.
  */
 function RollupEdgeImpl({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, data }: EdgeProps<RollupEdgeType>) {
-  const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
+  const lineStyle = useUiStore((s) => s.preferences.lineStyle)
+  const [path, labelX, labelY] = edgePath(lineStyle, { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
   if (!data) return null
   const single = data.types.length === 1 ? styleForType(data.types[0] || undefined) : null
   const colour = single?.colour ?? 'var(--color-ink-3)'

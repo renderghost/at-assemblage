@@ -8,6 +8,7 @@ import { fetchConnectionsForUrl, fetchSimilarUrls, SembleApiError } from '../ser
 import { recommendType, type Resource } from '../services/sources/semble/recommendType'
 import { buildSuggestions, connectionKey } from '../services/sources/semble/suggestions'
 import { isHttpUrl, normaliseUrl } from '../services/sources/url'
+import { useUiStore } from '../state/uiStore'
 import { useConnections, useLibrary } from './semble'
 
 const sembleKey = (kind: 'connections' | 'similar', url: string | undefined) =>
@@ -15,21 +16,29 @@ const sembleKey = (kind: 'connections' | 'similar', url: string | undefined) =>
 
 const SEMBLE_QUERY = { staleTime: 10 * 60_000, retry: 1 } as const
 
+/** Whether to ask Semble's public API at all: configured, and allowed in Preferences → Privacy & data. */
+export function useSembleData(): boolean {
+  const allowed = useUiStore((s) => s.preferences.useSembleData)
+  return !!config.sembleApi && allowed
+}
+
 /** Connections anyone made to or from this URL on Semble. Shared by suggestions and type recommendations. */
 export function useSembleConnections(url: string | undefined) {
+  const enabled = useSembleData()
   return useQuery({
     ...SEMBLE_QUERY,
     queryKey: sembleKey('connections', url),
-    enabled: !!url && !!config.sembleApi,
+    enabled: !!url && enabled,
     queryFn: ({ signal }) => fetchConnectionsForUrl(url!, { signal, limit: 100 }),
   })
 }
 
 function useSembleSimilar(url: string | undefined) {
+  const enabled = useSembleData()
   return useQuery({
     ...SEMBLE_QUERY,
     queryKey: sembleKey('similar', url),
-    enabled: !!url && !!config.sembleApi,
+    enabled: !!url && enabled,
     queryFn: ({ signal }) => fetchSimilarUrls(url!, { signal }),
   })
 }
@@ -37,6 +46,7 @@ function useSembleSimilar(url: string | undefined) {
 /** Suggestions for one card URL, joined with the user's own library and connections. */
 export function useSuggestions(url: string | undefined) {
   const { did } = useAuth()
+  const enabled = useSembleData()
   const library = useLibrary()
   const connections = useConnections()
   const sembleConnections = useSembleConnections(url)
@@ -81,19 +91,21 @@ export function useSuggestions(url: string | undefined) {
     isLoading: !settled && (sembleConnections.fetchStatus !== 'idle' || sembleSimilar.fetchStatus !== 'idle'),
     error: error ? (error instanceof SembleApiError ? error.message : 'Could not load suggestions.') : null,
     refetch: () => Promise.all([sembleConnections.refetch(), sembleSimilar.refetch()]),
-    enabled: !!config.sembleApi,
+    enabled,
   }
 }
 
 /**
  * A recommended connection type for source → target, only when the signal is
- * strong (see recommendType). Null while loading or when there is none.
+ * strong (see recommendType). Null while loading, when there is none, or when
+ * Preferences → Recommended type is off.
  */
 export function useTypeRecommendation(source: Resource | undefined, target: Resource | undefined) {
   const { did } = useAuth()
-  const sembleConnections = useSembleConnections(source?.url && isHttpUrl(source.url) ? source.url : undefined)
+  const on = useUiStore((s) => s.preferences.recommendedType !== 'off')
+  const sembleConnections = useSembleConnections(on && source?.url && isHttpUrl(source.url) ? source.url : undefined)
   return useMemo(
-    () => (source && target ? recommendType(source, target, sembleConnections.data ?? [], did) : null),
-    [source, target, sembleConnections.data, did],
+    () => (on && source && target ? recommendType(source, target, sembleConnections.data ?? [], did) : null),
+    [on, source, target, sembleConnections.data, did],
   )
 }

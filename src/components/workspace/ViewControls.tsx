@@ -2,6 +2,7 @@ import { Panel, useReactFlow, useStore } from '@xyflow/react'
 import { useCallback, useEffect } from 'react'
 import { FOCUS_PADDING, fitPadding } from '../../graph/viewport'
 import { useMinimapFits } from './useMinimapFits'
+import { motion } from '../../preferences/appearance'
 import { useUiStore } from '../../state/uiStore'
 import { Icon, type IconName } from '../ui/Icon'
 
@@ -56,7 +57,7 @@ export function ViewControls() {
 
   const fit = useCallback(() => {
     const { selected } = useUiStore.getState()
-    fitView({ padding: fitPadding(selected.nodes.length + selected.edges.length > 0), duration: DURATION })
+    fitView({ padding: fitPadding(selected.nodes.length + selected.edges.length > 0), duration: motion(DURATION) })
   }, [fitView])
   const zoomToSelection = useCallback(() => {
     const { selected } = useUiStore.getState()
@@ -67,7 +68,7 @@ export function ViewControls() {
         ids.add(edge.target)
       }
     }
-    if (ids.size) fitView({ nodes: [...ids].map((id) => ({ id })), padding: FOCUS_PADDING, duration: DURATION, maxZoom: 1.2 })
+    if (ids.size) fitView({ nodes: [...ids].map((id) => ({ id })), padding: FOCUS_PADDING, duration: motion(DURATION), maxZoom: 1.2 })
   }, [fitView, getEdges])
 
   useEffect(() => {
@@ -77,11 +78,11 @@ export function ViewControls() {
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
       if (document.querySelector('dialog[open], [role="dialog"]')) return
       const actions: Record<string, () => void> = {
-        '+': () => zoomIn({ duration: DURATION }),
-        '=': () => zoomIn({ duration: DURATION }),
-        '-': () => zoomOut({ duration: DURATION }),
-        _: () => zoomOut({ duration: DURATION }),
-        '0': () => zoomTo(1, { duration: DURATION }),
+        '+': () => zoomIn({ duration: motion(DURATION) }),
+        '=': () => zoomIn({ duration: motion(DURATION) }),
+        '-': () => zoomOut({ duration: motion(DURATION) }),
+        _: () => zoomOut({ duration: motion(DURATION) }),
+        '0': () => zoomTo(1, { duration: motion(DURATION) }),
         '1': fit,
         '2': zoomToSelection,
       }
@@ -101,11 +102,11 @@ export function ViewControls() {
         aria-label="View controls"
         className="flex items-center divide-x divide-line overflow-hidden rounded-lg border border-line bg-surface shadow-sm"
       >
-        <ControlButton icon="zoomOut" label="Zoom out" shortcut="-" onClick={() => zoomOut({ duration: DURATION })} />
-        <ControlButton label="Zoom to 100%" shortcut="0" onClick={() => zoomTo(1, { duration: DURATION })}>
+        <ControlButton icon="zoomOut" label="Zoom out" shortcut="-" onClick={() => zoomOut({ duration: motion(DURATION) })} />
+        <ControlButton label="Zoom to 100%" shortcut="0" onClick={() => zoomTo(1, { duration: motion(DURATION) })}>
           <span className="w-10 text-center text-[12px] font-medium tabular-nums">{Math.round(zoom * 100)}%</span>
         </ControlButton>
-        <ControlButton icon="zoomIn" label="Zoom in" shortcut="+" onClick={() => zoomIn({ duration: DURATION })} />
+        <ControlButton icon="zoomIn" label="Zoom in" shortcut="+" onClick={() => zoomIn({ duration: motion(DURATION) })} />
         <ControlButton icon="fit" label="Fit view" shortcut="1" onClick={fit} />
         <ControlButton icon="focus" label="Zoom to selection" shortcut="2" onClick={zoomToSelection} disabled={!hasSelection} />
         {minimapFits ? (

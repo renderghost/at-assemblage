@@ -157,42 +157,45 @@ export function ContextMenu() {
       className="fixed z-50 min-w-48 rounded-lg border border-line bg-surface p-1 shadow-xl"
       style={pos ?? { left: menu.x, top: menu.y, visibility: 'hidden' }}
     >
-      {items.map((item, i) =>
-        item.kind === 'separator' ? (
-          <div key={i} role="separator" className="my-1 border-t border-line" />
-        ) : item.kind === 'link' ? (
-          <a
-            key={i}
-            role="menuitem"
-            tabIndex={-1}
-            href={item.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => close(null)}
-            className={itemClass()}
-          >
-            <Icon name={item.icon} size={14} />
-            {item.label}
-            <span className="sr-only"> (opens in a new tab)</span>
-          </a>
-        ) : (
-          <button
-            key={i}
-            type="button"
-            role="menuitem"
-            tabIndex={-1}
-            onClick={() => {
-              close(null)
-              item.onSelect()
-            }}
-            className={itemClass(item.danger)}
-          >
-            <Icon name={item.icon} size={14} />
-            <span className="flex-1">{item.label}</span>
-            {item.hint ? <kbd className="font-sans text-[11px] text-ink-3">{item.hint}</kbd> : null}
-          </button>
-        ),
-      )}
+      {/* Scaled inside, so the menu's own position isn't (zoom would scale left/top too). */}
+      <div className="ui-scale">
+        {items.map((item, i) =>
+          item.kind === 'separator' ? (
+            <div key={i} role="separator" className="my-1 border-t border-line" />
+          ) : item.kind === 'link' ? (
+            <a
+              key={i}
+              role="menuitem"
+              tabIndex={-1}
+              href={item.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => close(null)}
+              className={itemClass()}
+            >
+              <Icon name={item.icon} size={14} />
+              {item.label}
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          ) : (
+            <button
+              key={i}
+              type="button"
+              role="menuitem"
+              tabIndex={-1}
+              onClick={() => {
+                close(null)
+                item.onSelect()
+              }}
+              className={itemClass(item.danger)}
+            >
+              <Icon name={item.icon} size={14} />
+              <span className="flex-1">{item.label}</span>
+              {item.hint ? <kbd className="font-sans text-[11px] text-ink-3">{item.hint}</kbd> : null}
+            </button>
+          ),
+        )}
+      </div>
     </div>
   )
 }

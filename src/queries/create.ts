@@ -50,8 +50,9 @@ export function useCreateCard() {
         },
       )
       const { requestSelection, notify } = useUiStore.getState()
-      // Zoom to it, unless the user chose where it goes.
-      requestSelection({ nodes: [plan.cardRef.uri], edges: [] }, { focus: !position })
+      // Zoom to it, unless the user chose where it goes or turned that off in Preferences.
+      const focus = !position && useUiStore.getState().preferences.zoomToNewCards
+      requestSelection({ nodes: [plan.cardRef.uri], edges: [] }, { focus })
       const added = plan.links.length
       notify({
         tone: 'success',
