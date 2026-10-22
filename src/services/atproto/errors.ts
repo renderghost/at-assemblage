@@ -1,5 +1,13 @@
 import { XrpcFetchError, XrpcResponseError } from '@atproto/lex-client'
 import { LexAuthFactorError } from '@atproto/lex-password-session'
+import {
+  AuthorizationError,
+  FetchResponseError,
+  LoginError,
+  OAuthResponseError,
+  ResolverError,
+  TokenRefreshError,
+} from '@atcute/oauth-browser-client'
 import { IdentityError } from './identity'
 
 export type ErrorKind =
@@ -33,6 +41,16 @@ export class AppError extends Error {
   }
 }
 
+export class SessionEndedError extends AppError {
+  constructor(notice?: string) {
+    super('session-expired', 'Your session has ended. Please sign in again.')
+    this.name = 'SessionEndedError'
+    this.notice = notice
+  }
+
+  readonly notice?: string
+}
+
 function isValidationError(err: unknown): err is Error {
   return err instanceof Error && err.name === 'LexValidationError'
 }
@@ -46,6 +64,45 @@ export function describeError(err: unknown): DescribedError {
   if (err instanceof IdentityError) return { kind: 'identity', message: err.message, retryable: err.code === 'DidNotFound' }
   if (err instanceof LexAuthFactorError) {
     return { kind: 'two-factor', message: 'Enter the sign-in code sent to your email.', retryable: false }
+  }
+  if (err instanceof AuthorizationError) {
+    return {
+      kind: 'permission',
+      message:
+        err.error === 'access_denied'
+          ? 'Sign-in was cancelled.'
+          : 'Your server declined to authorize this app. Try signing in again.',
+      retryable: true,
+    }
+  }
+  if (err instanceof LoginError) {
+    return { kind: 'identity', message: 'Could not sign in to that account. Check the handle or DID.', retryable: true }
+  }
+  if (err instanceof ResolverError) {
+    return {
+      kind: 'identity',
+      message: "Could not find that account's sign-in server. Try entering the account's DID instead of its handle.",
+      retryable: true,
+    }
+  }
+  if (err instanceof TokenRefreshError) {
+    return { kind: 'session-expired', message: 'Your session has expired. Please sign in again.', retryable: false }
+  }
+  if (err instanceof OAuthResponseError) {
+    if (err.response.status >= 500) {
+      return { kind: 'network', message: 'The sign-in server had a problem. Try again shortly.', retryable: true }
+    }
+    if (err.error === 'invalid_grant' || err.error === 'invalid_token') {
+      return { kind: 'session-expired', message: 'Your session has expired. Please sign in again.', retryable: false }
+    }
+    if (err.error === 'invalid_request' && err.description) {
+      return { kind: 'unknown', message: `This app's sign-in is misconfigured: ${err.description}`, retryable: false }
+    }
+    return { kind: 'unknown', message: 'Sign-in failed. Please try again.', retryable: true }
+  }
+  // Thrown when the reply is not the expected JSON
+  if (err instanceof FetchResponseError) {
+    return { kind: 'network', message: 'The sign-in server sent an unexpected response. Try again shortly.', retryable: true }
   }
   if (isValidationError(err)) {
     return { kind: 'validation', message: `The record did not pass schema validation: ${err.message}`, retryable: false }

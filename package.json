@@ -38,6 +38,8 @@
     "vitest": "^5.0.5"
   },
   "dependencies": {
+    "@atcute/client": "^5.1.2",
+    "@atcute/oauth-browser-client": "^5.1.0",
     "@atproto/common-web": "^0.5.15",
     "@atproto/lex": "^0.4.0",
     "@atproto/lex-cbor": "^0.1.7",

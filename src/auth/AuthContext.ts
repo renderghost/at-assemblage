@@ -1,14 +1,15 @@
 import { createContext, useContext } from 'react'
-import type { AuthSession, SignInInput } from '../services/atproto/session'
+import type { SignInInput, SignedInSession } from '../services/atproto/session'
 
 export type AuthState =
   | { status: 'restoring' }
   | { status: 'signed-out'; notice?: string }
-  | { status: 'signed-in'; auth: AuthSession }
+  | { status: 'signed-in'; auth: SignedInSession }
 
 export type AuthContextValue = {
   state: AuthState
   signIn: (input: SignInInput) => Promise<void>
+  startOAuthSignIn: (identifier: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -21,7 +22,7 @@ export function useAuthContext(): AuthContextValue {
 }
 
 /** For components that only render when signed in. */
-export function useAuth(): AuthSession {
+export function useAuth(): SignedInSession {
   const { state } = useAuthContext()
   if (state.status !== 'signed-in') throw new Error('useAuth requires a signed-in session')
   return state.auth

@@ -10,6 +10,8 @@ export function isAppPasswordFormat(value: string): boolean {
 }
 
 export type AuthSession = {
+  /** How the session was established. See {@link SignedInSession}. */
+  method: 'password'
   did: Did
   handle: string
   pds: string
@@ -17,9 +19,11 @@ export type AuthSession = {
   session: PasswordSession
 }
 
+export type SignedInSession = AuthSession | import('./oauth').OAuthSession
+
 export type SessionEvents = {
   /** Called when the session ends without the user signing out (e.g. revoked refresh token). */
-  onExpired?: () => void
+  onExpired?: (notice?: string) => void
 }
 
 /** Narrow storage contract so tests can substitute an in-memory store. */
@@ -76,6 +80,7 @@ export function hasPersistedSession(store?: KeyValueStore): boolean {
 
 function toAuthSession(session: PasswordSession, pds: string, fallbackHandle: string): AuthSession {
   return {
+    method: 'password',
     did: session.did as Did,
     handle: session.handle ?? fallbackHandle,
     pds,

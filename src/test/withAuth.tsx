@@ -14,7 +14,12 @@ export async function signedInFakePds(pds = new FakePds()) {
 
 export function makeWrapper(auth: AuthSession) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  const value = { state: { status: 'signed-in' as const, auth }, signIn: vi.fn(), signOut: vi.fn() }
+  const value = {
+    state: { status: 'signed-in' as const, auth },
+    signIn: vi.fn(),
+    startOAuthSignIn: vi.fn(),
+    signOut: vi.fn(),
+  }
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
