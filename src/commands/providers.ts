@@ -4,14 +4,32 @@ import { config } from '../config'
 import { DEFAULTS, type PreferenceKey, type Preferences } from '../preferences/preferences'
 import { styleForType } from '../services/sources/semble/connectionTypes'
 import { useUiStore } from '../state/uiStore'
-import { cardActions, collectionActions, connectionActions, defaultTypeView, openUrl, typeView } from './entities'
-import type { Command, CommandProvider, Row, View } from './types'
+import {
+  cardActions,
+  collectionActions,
+  connectionActions,
+  connectTargetView,
+  defaultTypeView,
+  openUrl,
+  pickCardView,
+  pickCollectionView,
+  typeView,
+} from './entities'
+import type { Command, CommandContext, CommandProvider, Row, View } from './types'
 
 const store = useUiStore.getState
 
 // ——— Create ———
 
-const createCommands: CommandProvider = () => [
+const createCommands: CommandProvider = (ctx) => {
+  // With one card or collection selected, Suggestions already act on it.
+  const oneCard = ctx.selection.cards.length === 1 && ctx.selection.links.length === 0
+  const oneCollection = ctx.selection.collections.length === 1 && ctx.selection.cards.length === 0
+  const hidden = new Set([...(oneCard ? ['connect-cards', 'edit-card', 'delete-card'] : []), ...(oneCollection ? ['edit-collection', 'delete-collection'] : [])])
+  return createCommandList(ctx).filter((c) => !hidden.has(c.id))
+}
+
+const createCommandList = (ctx: CommandContext): Command[] => [
   {
     id: 'new-card',
     title: 'Add card…',
@@ -32,6 +50,52 @@ const createCommands: CommandProvider = () => [
     description: 'Create a Semble collection. It is shown on the canvas straight away.',
     listed: true,
     run: () => store().openNewCollection(),
+  },
+  // Pick-then-act versions of the selection's actions, for when nothing is selected.
+  {
+    id: 'connect-cards',
+    title: 'Connect cards…',
+    section: 'Create',
+    icon: 'link',
+    keywords: ['connection', 'link', 'relate'],
+    description: 'Choose a card, then the card it connects to, the type and an optional note.',
+    run: () => ({
+      push: pickCardView({ id: 'connect-from', chip: 'Connect from', ctx, onPick: (entry) => ({ push: connectTargetView(entry.item, ctx) }) }),
+    }),
+  },
+  {
+    id: 'edit-card',
+    title: 'Edit card…',
+    section: 'Create',
+    icon: 'pencil',
+    keywords: ['change', 'title', 'collections'],
+    run: () => ({ push: pickCardView({ id: 'edit-card', chip: 'Edit card', ctx, onPick: (entry) => store().setEditCardId(entry.id) }) }),
+  },
+  {
+    id: 'delete-card',
+    title: 'Delete card…',
+    section: 'Create',
+    icon: 'trash',
+    keywords: ['remove'],
+    danger: true,
+    run: () => ({ push: pickCardView({ id: 'delete-card', chip: 'Delete card', ctx, onPick: (entry) => store().setDeleteCardId(entry.id) }) }),
+  },
+  {
+    id: 'edit-collection',
+    title: 'Edit collection…',
+    section: 'Create',
+    icon: 'pencil',
+    keywords: ['rename', 'description', 'open', 'personal'],
+    run: () => ({ push: pickCollectionView({ id: 'edit-collection', chip: 'Edit collection', ctx, onPick: (g) => store().setEditCollectionId(g.id) }) }),
+  },
+  {
+    id: 'delete-collection',
+    title: 'Delete collection…',
+    section: 'Create',
+    icon: 'trash',
+    keywords: ['remove'],
+    danger: true,
+    run: () => ({ push: pickCollectionView({ id: 'delete-collection', chip: 'Delete collection', ctx, onPick: (g) => store().setDeleteCollectionId(g.id) }) }),
   },
 ]
 

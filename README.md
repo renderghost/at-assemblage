@@ -199,6 +199,8 @@ A matched note or description shows as an excerpt under the title. A pasted link
 
 **Connecting from the keyboard.** **Connect to…** asks for the target (any card in your library, searched the same way), then the type, then an optional note. Recommended type and default type work as in the connection editor (the recommended one is marked, and chosen for you if Preferences says so). Enter on the note saves. If neither card is on the canvas, the first one is shown.
 
+**With nothing selected,** **Connect cards…**, **Edit card…**, **Delete card…**, **Edit collection…** and **Delete collection…** ask which card or collection first.
+
 **Settings.** Every preference is a command that applies at once: search "dark", "angled", "minimap" or "privacy". Each shows its current value. **Open Preferences…** opens the dialog.
 
 **Keys.** `↑` `↓` (or `Ctrl+N` / `Ctrl+P`) move, `Page Up` / `Page Down` jump, `Enter` runs, `⌘K` or `→` opens actions, `⌫` in an empty field goes back, and `Esc` goes back and then closes. **Keyboard shortcuts** lists every shortcut in the app. The bar doesn't open over another dialog. It's an ARIA combobox and listbox (`aria-activedescendant`), announces the result count, returns focus on close, and follows Preferences → Text size and Reduce motion.

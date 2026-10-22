@@ -287,33 +287,68 @@ function connectionNoteView(link: LinkInfo, ctx: CommandContext): View {
 
 // ——— Connecting from the keyboard ———
 
-/** Step 1: choose the card to connect to, from the whole library. */
-export function connectTargetView(source: GraphItem, ctx: CommandContext): View {
+/** Choose any card in your library: the canvas's cards first, or search. */
+export function pickCardView({
+  id,
+  chip,
+  ctx,
+  exclude,
+  onPick,
+}: {
+  id: string
+  chip: string
+  ctx: CommandContext
+  exclude?: string
+  onPick: (entry: CardEntry) => ReturnType<NonNullable<Row['run']>>
+}): View {
   return {
-    id: `connect:${source.id}`,
-    chip: `Connect “${source.title}” to`,
+    id,
+    chip,
     placeholder: 'Search your cards…',
     sections: (q) => {
       const hits = q.trim()
         ? search(ctx.index, q).cards
         : ctx.index.cards.filter((c) => ctx.onCanvas.items.has(c.id)).map((entry) => ({ entry, score: 0, titleRanges: [] }))
       const rows = hits
-        .filter((h) => h.entry.id !== source.id)
+        .filter((h) => h.entry.id !== exclude)
         .slice(0, 40)
-        .map((h): Row => {
-          const base = cardRow(h.entry, ctx, h)
-          return {
-            ...base,
-            run: () => ({ push: typeView(source, h.entry.item, ctx) }),
-            runLabel: 'Choose',
-            actions: undefined,
-            recentKey: undefined,
-          }
-        })
-      return [{ id: 'targets', title: q.trim() ? 'Cards' : 'On the canvas', rows }]
+        .map((h): Row => ({ ...cardRow(h.entry, ctx, h), run: () => onPick(h.entry), runLabel: 'Choose', actions: undefined, recentKey: undefined }))
+      return [{ id: 'cards', title: q.trim() ? 'Cards' : 'On the canvas', rows }]
     },
-    empty: (q) => ({ title: q.trim() ? `No cards match “${q.trim()}”` : 'Search for a card to connect to' }),
+    empty: (q) => ({ title: q.trim() ? `No cards match “${q.trim()}”` : 'Type to search all your cards' }),
   }
+}
+
+/** Choose a collection. */
+export function pickCollectionView({ id, chip, ctx, onPick }: { id: string; chip: string; ctx: CommandContext; onPick: (group: GraphGroup) => void }): View {
+  return {
+    id,
+    chip,
+    placeholder: 'Search your collections…',
+    sections: (q) => {
+      const entries = q.trim() ? search(ctx.index, q).collections : ctx.index.collections.map((entry) => ({ entry, score: 0, titleRanges: [] }))
+      const rows = entries.map((h): Row => ({
+        ...collectionRow(h.entry, ctx, h),
+        run: () => onPick(h.entry.group),
+        runLabel: 'Choose',
+        actions: undefined,
+        recentKey: undefined,
+      }))
+      return [{ id: 'collections', title: 'Collections', rows }]
+    },
+    empty: (q) => ({ title: q.trim() ? `No collections match “${q.trim()}”` : 'You have no collections yet' }),
+  }
+}
+
+/** Step 1: choose the card to connect to, from the whole library. */
+export function connectTargetView(source: GraphItem, ctx: CommandContext): View {
+  return pickCardView({
+    id: `connect:${source.id}`,
+    chip: `Connect “${source.title}” to`,
+    ctx,
+    exclude: source.id,
+    onPick: (entry) => ({ push: typeView(source, entry.item, ctx) }),
+  })
 }
 
 /** A list of Semble's connection types. */
